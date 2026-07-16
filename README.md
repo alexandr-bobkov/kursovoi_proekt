@@ -1038,3 +1038,105 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -W %h:
    Использование переменных и циклов (таких как `dynamic`, `for_each`) необходимо в коммерческой разработке для быстрого масштабирования инфраструктуры на сотни серверов или разные регионы (Dev/Stage/Prod). Текущий проект имеет строго фиксированную топологию по техническому заданию (2 веб-сервера, 1 бастион, фиксированные системы мониторинга и логов). Внедрение переменных здесь является избыточным усложнением кода (принцип KISS — *Keep It Simple, Stupid*).
 4. **Упрощение интеграции с Ansible:** 
    Прямое указание параметров в коде позволило зафиксировать внутреннюю IP-адресацию в подсетях. Благодаря этому конфигурационные файлы для агентов Filebeat, экспортеров и сервера Prometheus получились статичными и стабильными, что избавило от необходимости писать сложные dynamic-шаблоны генерации инвентаря для Ansible.
+
+
+<details>
+<summary><b>Вариант с переменными</b></summary>
+Блок 15: Файл terraform/variables.tfЗдесь объявляются все переменные, задаются их типы, текстовые описания (для проверяющего) и дефолтные значения. Создайте этот файл в папке terraform/.markdown## 2.7 Файл `terraform/variables.tf`
+
+```hcl
+variable "yc_cloud_id" {
+  type        = string
+  description = "Идентификатор облака Yandex Cloud"
+}
+
+variable "yc_folder_id" {
+  type        = string
+  description = "Идентификатор каталога внутри облака"
+}
+
+variable "yc_zone_default" {
+  type        = string
+  default     = "ru-central1-a"
+  description = "Основная зона доступности для сервисов"
+}
+
+variable "yc_zone_backup" {
+  type        = string
+  default     = "ru-central1-b"
+  description = "Резервная зона доступности для второго веб-сервера"
+}
+
+variable "vm_ubuntu_family" {
+  type        = string
+  default     = "ubuntu-2204-lts"
+  description = "Семейство операционной системы для поиска актуального образа"
+}
+
+variable "vm_platform_id" {
+  type        = string
+  default     = "standard-v3"
+  description = "Тип используемого процессора (Intel Ice Lake)"
+}
+
+variable "vm_core_fraction" {
+  type        = number
+  default     = 20
+  description = "Гарантированная доля CPU в % для прерываемых ВМ (экономия бюджета)"
+}
+
+variable "vm_cores" {
+  type        = number
+  default     = 2
+  description = "Количество ядер процессора для виртуальных машин"
+}
+
+variable "vm_memory_default" {
+  type        = number
+  default     = 2
+  description = "Объем оперативной памяти в ГБ для стандартных ВМ"
+}
+
+variable "vm_memory_large" {
+  type        = number
+  default     = 4
+  description = "Объем оперативной памяти в ГБ для тяжелых ВМ (OpenSearch/Grafana)"
+}
+
+variable "disk_type" {
+  type        = string
+  default     = "network-hdd"
+  description = "Тип диска (HDD вместо SSD для экономии)"
+}
+
+variable "ssh_public_key_path" {
+  type        = string
+  default     = "~/.ssh/id_rsa.pub"
+  description = "Путь к вашему публичному SSH-ключу на локальном компьютере"
+}
+```
+Используйте код с осторожностью.Блок 16: Измененный файл terraform/providers.tfТеперь провайдер не содержит жестко прописанных ID, а считывает их динамически из файла переменных.markdown## 2.8 Обновленный файл `terraform/providers.tf`
+
+```hcl
+terraform {
+  required_providers {
+    yandex = {
+      source  = "yandex-cloud/yandex"
+      version = ">= 0.100.0"
+    }
+  }
+  required_version = ">= 1.3.0"
+}
+
+provider "yandex" {
+  # Вместо жесткого кода используем объявленные переменные через синтаксис var.имя
+  cloud_id  = var.yc_cloud_id   
+  folder_id = var.yc_folder_id  
+  zone      = var.yc_zone_default  
+}
+```
+Используйте код с осторожностью.💡 Как теперь передавать значения (Шпаргалка для защиты):Если вы внедрили переменные, у вас есть два пути передать туда ваши реальные cloud_id и folder_id при запуске, о которых можно рассказать преподавателю:Файл автоматических значений (terraform.tfvars):Вы создаете рядом файл terraform.tfvars и пишете туда:hclyc_cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
+yc_folder_id = "b1gxxxxxxxxxxxxxxxxx"
+Используйте код с осторожностью.Terraform сам подставит их при запуске. Это самый правильный способ.Через переменные окружения терминала (Самый быстрый способ перед защитой):Вы можете ничего не создавать, а просто запустить команду apply, передав ID прямо в неё:bashterraform apply -var="yc_cloud_id=ВАШ_ID" -var="yc_folder_id=ВАШ_ID"
+Используйте код с осторожностью.Если вы перейдете на этот вариант, обязательно удалите подпункт 4.2 из Заключения (про отказ от переменных), так как ваш код теперь полностью соответствует промышленным стандартам!Копируйте эти два блока в свой отчет. Инфраструктура теперь полностью готова. Ни пуха, ни пера на завтрашней защите, вы проделали огромную работу!
+</details>
