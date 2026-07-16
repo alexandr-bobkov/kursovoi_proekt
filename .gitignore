@@ -1,0 +1,8 @@
+# Игнорируем секретный ключ сервисного аккаунта
+*authorized_key.json
+authorized_key.json
+
+# Игнорируем файлы конфигурации и временные файлы Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
