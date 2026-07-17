@@ -1,0 +1,138 @@
+---
+# ==============================================================================
+# COMPLETELY AUTOMATED INTEGRATED MONITORING AND LOGGING STACK (ELK + FILEBEAT)
+# ==============================================================================
+- name: Deploy Elasticsearch Container
+  hosts: logging_storage
+  become: yes
+  vars:
+    host_gcr: "mirror.gcr.io"
+    folder_elastic: "/elasticsearch"
+    tag_elastic: ":8.11.3"
+    elastic_image_full: "{{ [host_gcr, folder_elastic, tag_elastic] | join('') }}"
+  tasks:
+    - name: Sozdanie rabochej direktorii dlya Elastic
+      file:
+        path: /opt/elastic-stack
+        state: directory
+        mode: '0755'
+
+    - name: Zapiss konfiguracii docker-compose.yml dlya Elasticsearch
+      copy:
+        dest: /opt/elastic-stack/docker-compose.yml
+        content: |
+          version: '3.8'
+          services:
+            elasticsearch:
+              image: {{ elastic_image_full }}
+              container_name: elasticsearch-node
+              environment:
+                - discovery.type=single-node
+                - xpack.security.enabled=false
+                - "ES_JAVA_OPTS=-Xms512m -Xmx1g"
+              ports:
+                - "9200:9200"
+              volumes:
+                - elastic-data:/usr/share/elasticsearch/data
+              restart: always
+
+          volumes:
+            elastic-data:
+              driver: local
+        mode: '0644'
+
+    - name: Zapusk conteinera Elasticsearch cherez docker-compose up
+      shell: "docker-compose -f /opt/elastic-stack/docker-compose.yml up -d"
+
+- name: Deploy Kibana Container
+  hosts: public_mgmt
+  become: yes
+  vars:
+    host_gcr: "mirror.gcr.io"
+    folder_kibana: "/kibana"
+    tag_kibana: ":8.11.3"
+    kibana_image_full: "{{ [host_gcr, folder_kibana, tag_kibana] | join('') }}"
+    elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
+  tasks:
+    - name: Create working directory for Kibana
+      file:
+        path: /opt/kibana-stack
+        state: directory
+        mode: '0755'
+
+    - name: Zapiss konfiguracii docker-compose.yml dlya Kibana UI
+      copy:
+        dest: /opt/kibana-stack/docker-compose.yml
+        content: |
+          version: '3.8'
+          services:
+            kibana:
+              image: {{ kibana_image_full }}
+              container_name: kibana-dashboard
+              environment:
+                - ELASTICSEARCH_HOSTS=http://{{ elastic_internal_ip }}:9200
+                - SERVER_HOST=0.0.0.0
+              ports:
+                - "5601:5601"
+              restart: always
+        mode: '0644'
+
+    - name: Zapusk conteinera Kibana cherez docker-compose up
+      shell: "docker-compose -f /opt/kibana-stack/docker-compose.yml down && docker-compose -f /opt/kibana-stack/docker-compose.yml up -d"
+
+- name: Deploy Native Filebeat Service on Web Servers
+  hosts: webservers
+  become: yes
+  vars:
+    prefix_net: "https://"
+    host_mirror: "mirror.yandex.ru"
+    pool_path: "/mirrors/elastic/8/pool/main"
+    package_dir: "/f/filebeat"
+    file_deb: "/filebeat-8.11.3-amd64.deb"
+    filebeat_download_url: "{{ [prefix_net, host_mirror, pool_path, package_dir, file_deb] | join('') }}"
+    elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
+  tasks:
+    - name: Skachivanie oficialnogo paketa Filebeat DEB s zerkala Yandeksa
+      get_url:
+        url: "{{ filebeat_download_url }}"
+        dest: /tmp/filebeat.deb
+        mode: '0644'
+
+    - name: Ustanovka Filebeat sluzhby iz lokalnogo fajla DEB
+      apt:
+        deb: /tmp/filebeat.deb
+        state: present
+
+    - name: Zapiss vnutrennego konfiga sbora logov v /etc/filebeat/filebeat.yml
+      copy:
+        dest: /etc/filebeat/filebeat.yml
+        content: |
+          filebeat.inputs:
+          - type: log
+            enabled: true
+            paths: [ /var/log/nginx/access.log ]
+            tags: ["nginx-access"]
+          - type: log
+            enabled: true
+            paths: [ /var/log/nginx/error.log ]
+            tags: ["nginx-error"]
+
+          output.elasticsearch:
+            hosts: ["http://{{ elastic_internal_ip }}:9200"]
+            index: "nginx-logs-%{+yyyy.MM.dd}"
+
+          setup.template.name: "nginx"
+          setup.template.pattern: "nginx-logs-*"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Obnovlenie kesha systemd demonov dlya Filebeat
+      systemd:
+        daemon_reload: yes
+
+    - name: Zapusk i vklyuchenie avtozagruzku sluzhby Filebeat
+      systemd:
+        name: filebeat
+        state: restarted
+        enabled: yes

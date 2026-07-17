@@ -1,0 +1,108 @@
+---
+# ==============================================================================
+# COMPLETELY AUTOMATED WEBSITE DEPLOYMENT WITH STUDENT DATA AND HARDWARE INFOS
+# ==============================================================================
+- name: Deploy Dynamic PHP Website with Hardware Stats on Debian 13
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Ustanovka Nginx i PHP-FPM dlya raboty dinamiki
+      apt:
+        name: [nginx, php-fpm]
+        state: present
+        update_cache: yes
+
+    - name: Opredelenie tochnogo imeni socketa PHP-FPM v sisteme Debian 13
+      shell: "ls /run/php/php*-fpm.sock | head -n 1"
+      register: php_socket_path
+
+    - name: Zapiss idealnogo konfiga Nginx default s podderzhkoi PHP
+      copy:
+        dest: /etc/nginx/sites-available/default
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+
+              root /var/www/html;
+              index index.php index.html index.htm;
+
+              server_name _;
+
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+
+              location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:{{ php_socket_path.stdout }};
+              }
+          }
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Generaciya dinamicheskogo index.php faila s hardware dannymi
+      copy:
+        dest: /var/www/html/index.php
+        content: |
+          <!DOCTYPE html>
+          <html lang="ru">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Курсовой проект - Бобков А.К.</title>
+              <style>
+                  body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                  .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; max-width: 600px; width: 100%; border-top: 8px solid #0052cc; margin: 20px; }
+                  h1 { color: #0052cc; margin-bottom: 5px; font-size: 26px; }
+                  .author { font-size: 18px; color: #555; font-weight: 600; margin-bottom: 25px; }
+                  p { font-size: 15px; color: #666; line-height: 1.6; }
+                  .status-box { background-color: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 16px; color: #0d47a1; text-align: left; }
+                  .hardware-box { background-color: <?php echo ('{{ ansible_hostname }}' == 'web1') ? '#f1f8e9' : '#fff3e0'; ?>; border: 1px solid <?php echo ('{{ ansible_hostname }}' == 'web1') ? '#c5e1a5' : '#ffe082'; ?>; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 15px; color: <?php echo ('{{ ansible_hostname }}' == 'web1') ? '#33691e' : '#e65100'; ?>; text-align: left; }
+                  .status-line { margin: 8px 0; display: flex; justify-content: space-between; align-items: center; }
+                  .badge { background: <?php echo ('{{ ansible_hostname }}' == 'web1') ? '#4caf50' : '#ff9800'; ?>; color: white; padding: 3px 10px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+                  .ip-text { font-family: 'Courier New', monospace; font-weight: bold; color: #333; }
+                  .footer { margin-top: 30px; font-size: 12px; color: #aaa; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>Курсовой проект по DevOps</h1>
+                  <div class="author">Студент: Бобков А.К.</div>
+                  
+                  <p>Vysokoaktivnaya sbalansirovannaya infrastruktura uspeshno rabotaet v Yandex Cloud.</p>
+                  
+                  <div class="status-box">
+                      <div class="status-line">Активный сервер обработки: <span class="badge"><?php echo strtoupper('{{ ansible_hostname }}'); ?></span></div>
+                      <div class="status-line">Внутренний IP-адрес ноды: <span class="ip-text">{{ ansible_host }}</span></div>
+                      <div class="status-line">Текущая дата и время сервера: <span class="ip-text"><?php echo date('d.m.Y H:i:s T'); ?></span></div>
+                  </div>
+
+                  <div class="hardware-box">
+                      <div style="font-weight: bold; margin-bottom: 8px; text-align: center;">Аппаратные данные виртуальной машины:</div>
+                      <div class="status-line">Процессор (vCPU): <span class="ip-text">{{ ansible_processor[1] | default('Intel Xeon / AMD EPYC') }} ({{ ansible_processor_vcpus }} Cores)</span></div>
+                      <div class="status-line">Оперативная память (RAM): <span class="ip-text">{{ (ansible_memtotal_mb / 1024) | round(1) }} GB</span></div>
+                      <div class="status-line">Архитектура ОС Linux: <span class="ip-text">{{ ansible_architecture }}</span></div>
+                  </div>
+                  
+                  <p>Sbor metrik (Prometheus/Grafana) i logi (ELK Stack) zapushcheny.</p>
+                  <div class="footer">Infrastruktura kak kod (IaC) &copy; 2026</div>
+              </div>
+          </body>
+          </html>
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Prinyaditelnoe udalenie staroi zavisloi zaglushki index.html
+      file:
+        path: /var/www/html/index.html
+        state: absent
+
+    - name: Pervonachalnyi zapusk i avtozagruzka sluzhb veb-steka
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop: [nginx, php-fpm]
