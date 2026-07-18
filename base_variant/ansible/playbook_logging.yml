@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# COMPLETELY AUTOMATED INTEGRATED MONITORING AND LOGGING STACK (ELK + FILEBEAT)
+# CHAST 1: ZAPUSK CONTEINERA ELASTICSEARCH STORAGE S PAROLEM
 # ==============================================================================
 - name: Deploy Elasticsearch Container
   hosts: logging_storage
@@ -28,7 +28,8 @@
               container_name: elasticsearch-node
               environment:
                 - discovery.type=single-node
-                - xpack.security.enabled=false
+                - xpack.security.enabled=true
+                - ELASTIC_PASSWORD=BobkovDevOps2026
                 - "ES_JAVA_OPTS=-Xms512m -Xmx1g"
               ports:
                 - "9200:9200"
@@ -44,8 +45,11 @@
     - name: Zapusk conteinera Elasticsearch cherez docker-compose up
       shell: "docker-compose -f /opt/elastic-stack/docker-compose.yml up -d"
 
-- name: Deploy Kibana Container
-  hosts: public_mgmt
+# ==============================================================================
+# CHAST 2: AUTOMATIC ZAPUSK CONTEINERA KIBANA S AVTORIZACIEJ
+# ==============================================================================
+- name: Deploy Kibana Container directly to Bastion Node
+  hosts: bastion
   become: yes
   vars:
     host_gcr: "mirror.gcr.io"
@@ -54,7 +58,7 @@
     kibana_image_full: "{{ [host_gcr, folder_kibana, tag_kibana] | join('') }}"
     elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
   tasks:
-    - name: Create working directory for Kibana
+    - name: Create working directory for Kibana on Bastion
       file:
         path: /opt/kibana-stack
         state: directory
@@ -71,6 +75,8 @@
               container_name: kibana-dashboard
               environment:
                 - ELASTICSEARCH_HOSTS=http://{{ elastic_internal_ip }}:9200
+                - ELASTICSEARCH_USERNAME=elastic
+                - ELASTICSEARCH_PASSWORD=BobkovDevOps2026
                 - SERVER_HOST=0.0.0.0
               ports:
                 - "5601:5601"
@@ -80,6 +86,9 @@
     - name: Zapusk conteinera Kibana cherez docker-compose up
       shell: "docker-compose -f /opt/kibana-stack/docker-compose.yml down && docker-compose -f /opt/kibana-stack/docker-compose.yml up -d"
 
+# ==============================================================================
+# CHAST 3: RECURSIVE USTANOVKA FILEBEAT S AVTORIZACIEJ V BAZU
+# ==============================================================================
 - name: Deploy Native Filebeat Service on Web Servers
   hosts: webservers
   become: yes
@@ -119,6 +128,8 @@
 
           output.elasticsearch:
             hosts: ["http://{{ elastic_internal_ip }}:9200"]
+            username: "elastic"
+            password: "BobkovDevOps2026"
             index: "nginx-logs-%{+yyyy.MM.dd}"
 
           setup.template.name: "nginx"

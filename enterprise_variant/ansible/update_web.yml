@@ -1,0 +1,32 @@
+---
+- name: Nastrojka processora Nginx PHP i sbornika metrik dlya Debian 13
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Proverka Р°РєС‚РёРІРЅРѕСЃС‚Рё Рё Р·Р°РїСѓСЃРє СЃРёСЃС‚РµРјРЅРѕРіРѕ РґРµРјРѕРЅР° PHP8.4-FPM
+      systemd:
+        name: php8.4-fpm
+        state: started
+        enabled: yes
+
+    - name: Udalenie ostatkov zavodskoj staticheskoj zaglushi index.html
+      file:
+        path: /var/www/html/index.html
+        state: absent
+
+    - name: Ustanovka oficialnogo agenta metrik Prometheus Node Exporter
+      apt:
+        name: prometheus-node-exporter
+        state: present
+        update_cache: yes
+
+    - name: Dobavlenie Node Exporter v avtozagruzku OS i prinuditelnyj zapusk
+      systemd:
+        name: prometheus-node-exporter
+        state: restarted
+        enabled: yes
+
+    - name: Perezapusk osnovnogo veb-servera Nginx dlya primeneniya nastrojek
+      systemd:
+        name: nginx
+        state: restarted

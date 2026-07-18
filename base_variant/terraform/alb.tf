@@ -103,8 +103,7 @@ resource "yandex_compute_snapshot_schedule" "daily_backup" {
     yandex_compute_instance.web_2.boot_disk[0].disk_id,
     yandex_compute_instance.prometheus.boot_disk[0].disk_id,
     yandex_compute_instance.opensearch.boot_disk[0].disk_id,
-    yandex_compute_instance.grafana_kibana.boot_disk[0].disk_id
-  ]
+     ]
 }
 
 # --- ВЫВОД IP АДРЕСОВ В ТЕРМИНАЛ (ОУТПУТЫ) ---
@@ -116,7 +115,7 @@ output "IP_BALANCER_SITE_PUBLIC" {
   value = yandex_vpc_address.alb_address.external_ipv4_address[0].address
 }
 output "IP_GRAFANA_AND_LOGS_PUBLIC" {
-  value = yandex_compute_instance.grafana_kibana.network_interface[0].nat_ip_address
+  value = yandex_compute_instance.bastion.network_interface[0].nat_ip_address
 }
 output "IP_INTERNAL_WEB_SERVER_1" {
   value = yandex_compute_instance.web_1.network_interface[0].ip_address
@@ -131,29 +130,6 @@ output "IP_INTERNAL_OPENSEARCH_STORAGE" {
   value = yandex_compute_instance.opensearch.network_interface[0].ip_address
 }
 
-# --- АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ИНВЕНТАРЯ ANSIBLE (ФИНАЛЬНЫЙ ЭТАЛОН) ---
-resource "local_file" "ansible_inventory" {
-  filename = "../ansible/hosts.ini"
-  content  = <<EOT
-[webservers]
-web1 ansible_host=${yandex_compute_instance.web_1.network_interface[0].ip_address}
-web2 ansible_host=${yandex_compute_instance.web_2.network_interface[0].ip_address}
 
-[prometheus_host]
-prometheus_server ansible_host=${yandex_compute_instance.prometheus.network_interface[0].ip_address}
-
-[logging_storage]
-elasticsearch_server ansible_host=${yandex_compute_instance.opensearch.network_interface[0].ip_address}
-
-[public_mgmt]
-# ИСПРАВЛЕНО: Обращаемся по внутреннему IP сквозь защищенный туннель Бастиона
-grafana_kibana_server ansible_host=${yandex_compute_instance.grafana_kibana.network_interface[0].ip_address}
-
-[all:vars]
-ansible_user=debian
-ansible_ssh_private_key_file=/home/user/.ssh/id_rsa
-ansible_ssh_common_args="-o StrictHostKeyChecking=no -o ProxyJump=debian@${yandex_compute_instance.bastion.network_interface[0].nat_ip_address}"
-EOT
-}
 
 

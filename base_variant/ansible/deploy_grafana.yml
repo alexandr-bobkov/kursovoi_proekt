@@ -1,0 +1,95 @@
+---
+- name: Install Grafana and Auto-Import Linux Dashboard on Bastion Host
+  hosts: bastion
+  become: yes
+  vars:
+    prefix_net: "https://"
+    host_mirror: "mirror.yandex.ru"
+    mid_folder: "/mirrors/"
+    dom_part1: "packages."
+    dom_part2: "grafana."
+    dom_part3: "com"
+    tail_path: "/enterprise/deb/pool/main/g/grafana-enterprise"
+    file_deb: "/grafana-enterprise_10.2.3_amd64.deb"
+    grafana_download_url: "{{ [prefix_net, host_mirror, mid_folder, dom_part1, dom_part2, dom_part3, tail_path, file_deb] | join('') }}"
+  tasks:
+    - name: Udalenie starih repozitoriev Grafana
+      file:
+        path: /etc/apt/sources.list.d/grafana.list
+        state: absent
+
+    - name: Ustanovka neobhodimih zavisimostei
+      apt:
+        name: [apt-transport-https, wget, adduser, libfontconfig1, musl]
+        state: present
+        update_cache: yes
+
+    - name: Skachivanie paketa Grafana s zerkala Yandeksa
+      get_url:
+        url: "{{ grafana_download_url }}"
+        dest: /tmp/grafana-enterprise.deb
+        mode: '0644'
+
+    - name: Lokalnaya ustanovka Grafana Enterprise iz DEB
+      apt:
+        deb: /tmp/grafana-enterprise.deb
+        state: present
+
+    - name: Sozdanie sistemnih direktoriij dlya avto-importa dashbordov
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: grafana
+        mode: '0755'
+      loop:
+        - /etc/grafana/provisioning/datasources
+        - /etc/grafana/provisioning/dashboards
+        - /var/lib/grafana/dashboards
+
+    - name: Avtomaticheskaya nastroika Prometheus kak Data Source
+      copy:
+        dest: /etc/grafana/provisioning/datasources/prometheus.yaml
+        content: |
+          apiVersion: 1
+          datasources:
+            - name: prometheus
+              type: prometheus
+              access: proxy
+              url: http://10.0.10.19:9090
+              isDefault: true
+        mode: '0644'
+
+    - name: Avtomaticheskaya nastroika provaidera dlya poiska JSON dashbordov
+      copy:
+        dest: /etc/grafana/provisioning/dashboards/dashboards.yaml
+        content: |
+          apiVersion: 1
+          providers:
+            - name: 'Automated Dashboards'
+              orgId: 1
+              folder: ''
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards
+        mode: '0644'
+
+    - name: Skachivanie oficialnogo JSON shablona dashborda 1860 (Node Exporter Full)
+      get_url:
+        url: "https://grafana.com"
+        dest: /var/lib/grafana/dashboards/node-exporter-full.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
+
+    - name: Obnovlenie kesha systemd demonov
+      systemd:
+        daemon_reload: yes
+
+    - name: Zapusk i vklyuchenie avtozagruzku Grafana Server
+      systemd:
+        name: grafana-server
+        state: restarted
+        enabled: yes

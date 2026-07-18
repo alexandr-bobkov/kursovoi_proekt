@@ -1,0 +1,117 @@
+---
+- name: Deploy Dynamic PHP Website with Hardware Stats on Debian 13
+  hosts: webservers
+  become: true
+  tasks:
+    - name: YA stavlu Nginx i PHP-FPM dlya raboty dinamiki
+      apt:
+        name: nginx,php-fpm,php-cli
+        state: present
+        update_cache: yes
+
+    - name: YA zapisyvayu idealnyi konfig Nginx default dlya lubogo IP
+      copy:
+        dest: /etc/nginx/sites-available/default
+        mode: '0644'
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              server_name _;
+
+              root /var/web;
+              index index.php index.html;
+
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+
+              location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+              }
+          }
+
+    - name: YA sozdayu rabochuyu papku dlya sayta
+      file:
+        path: /var/web
+        state: directory
+        mode: '0755'
+
+    - name: YA generiruu krasivyi index.php s familiei i stats
+      copy:
+        dest: /var/web/index.php
+        mode: '0644'
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="UTF-8">
+              <title>DEVOPS Enterprise Stand - Bobkov</title>
+              <style>
+                  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); color: #333; text-align: center; padding: 60px 20px; margin: 0; min-height: 100vh; box-sizing: border-box; }
+                  .card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: inline-block; max-width: 550px; width: 100%; border-top: 6px solid #00d2ff; }
+                  .badge { background: #2b579a; color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; display: inline-block; margin-bottom: 10px; letter-spacing: 1px; }
+                  h1 { color: #1e3c72; margin-top: 5px; font-size: 26px; }
+                  .student { font-size: 18px; color: #555; margin-bottom: 25px; font-weight: 600; border-bottom: 2px dashed #eee; padding-bottom: 15px; }
+                  .status-box { background: #e8f5e9; border: 1px solid #c8e6c9; padding: 15px; border-radius: 8px; margin: 20px 0; }
+                  .status { color: #2e7d32; font-weight: bold; font-size: 1.2em; margin: 0; }
+                  .stats-table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: left; }
+                  .stats-table th, .stats-table td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+                  .stats-table th { color: #666; font-weight: 600; width: 45%; }
+                  .stats-table td { color: #111; font-family: 'Courier New', Courier, monospace; font-weight: bold; }
+              </style>
+          </head>
+          <body>
+              <div class="card">
+                  <div class="badge">DEVOPS ENTERPRISE</div>
+                  <h1>Kursovoi Proekt: Enterprise Variant</h1>
+                  <div class="student">Student: Bobkov A.K.</div>
+                  
+                  <div class="status-box">
+                      <p class="status">Aktivnyi server obrabotki: <?php echo gethostname(); ?></p>
+                  </div>
+
+                  <table class="stats-table">
+                      <tr>
+                          <th>Vnutrenniy IP-adres:</th>
+                          <td><?php echo $_SERVER['SERVER_ADDR']; ?></td>
+                      </tr>
+                      <tr>
+                          <th>Operacionnaya sistema:</th>
+                          <td><?php echo php_uname('s') . " " . php_uname('r'); ?></td>
+                      </tr>
+                      <tr>
+                          <th>Dostupnaya RAM (Total):</th>
+                          <td><?php echo round(shell_exec("free -m | awk '/Mem:/ {print $2}'")) . " MB"; ?></td>
+                      </tr>
+                      <tr>
+                          <th>Kolichestvo yader CPU:</th>
+                          <td><?php echo trim(shell_exec("nproc")); ?></td>
+                      </tr>
+                      <tr>
+                          <th>Servernyi Uptime:</th>
+                          <td><?php echo trim(shell_exec("uptime -p")); ?></td>
+                      </tr>
+                      <tr>
+                          <th>Tekushee vremya:</th>
+                          <td><?php echo date('Y-m-d H:i:s'); ?></td>
+                      </tr>
+                  </table>
+              </div>
+          </body>
+          </html>
+
+    - name: YA prinuditelno udalyayu staruu zavisluu zaglushku index.html
+      file:
+        path: /var/web/index.html
+        state: absent
+
+    - name: YA perezapuskayu i vkluchayu v avtozagruzku sluzhby veb steka
+      service:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop:
+        - nginx
+        - php8.4-fpm

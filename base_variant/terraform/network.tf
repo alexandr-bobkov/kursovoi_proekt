@@ -102,22 +102,6 @@ resource "yandex_vpc_security_group" "internal_shared_rule" {
   }
 }
 
-# Группа безопасности для Бастиона (Требуется для vms.tf)
-resource "yandex_vpc_security_group" "bastion_sg" {
-  name       = "bastion-security-group"
-  network_id = yandex_vpc_network.main_vpc.id
-  ingress {
-    protocol       = "TCP"
-    v4_cidr_blocks = ["0.0.0.0/0"]
-    port           = 22
-  }
-  egress {
-    protocol       = "ANY"
-    v4_cidr_blocks = ["0.0.0.0/0"]
-    from_port      = 0
-    to_port        = 65535
-  }
-}
 
 # Группа безопасности для Веб-серверов Nginx (Требуется для vms.tf)
 resource "yandex_vpc_security_group" "web_sg" {
@@ -160,26 +144,33 @@ resource "yandex_vpc_security_group" "internal_mgmt_sg" {
   }
 }
 
-# Группа безопасности для публичных веб-панелей (Grafana/Kibana - Требуется для vms.tf)
-resource "yandex_vpc_security_group" "public_ui_sg" {
-  name       = "public-ui-security-group"
+resource "yandex_vpc_security_group" "bastion_sg" {
+  name       = "bastion-security-group"
   network_id = yandex_vpc_network.main_vpc.id
+
   ingress {
     protocol       = "TCP"
+    description    = "Allow SSH from anywhere"
     v4_cidr_blocks = ["0.0.0.0/0"]
-    port           = 3000 # Вход в Grafana
+    port           = 22
   }
+
+  # Открываем порт 5601 для Kibana внутри ресурса
   ingress {
     protocol       = "TCP"
+    description    = "Allow Kibana UI for online-commission"
     v4_cidr_blocks = ["0.0.0.0/0"]
-    port           = 5601 # Вход в Kibana
+    port           = 5601
   }
+
+  # Открываем порт 3000 для Grafana внутри ресурса
   ingress {
-    protocol       = "ANY"
-    v4_cidr_blocks = ["10.0.0.0/16"]
-    from_port      = 0
-    to_port        = 65535
+    protocol       = "TCP"
+    description    = "Allow Grafana UI for online-commission"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    port           = 3000
   }
+
   egress {
     protocol       = "ANY"
     v4_cidr_blocks = ["0.0.0.0/0"]
@@ -187,3 +178,4 @@ resource "yandex_vpc_security_group" "public_ui_sg" {
     to_port        = 65535
   }
 }
+

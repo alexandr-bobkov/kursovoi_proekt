@@ -1,0 +1,66 @@
+{
+  "version": 4,
+  "terraform_version": "1.14.4",
+  "serial": 147,
+  "lineage": "d1bc91ba-db1b-66d9-5b7b-32fbac56b20d",
+  "outputs": {},
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_gateway",
+      "name": "nat_gateway",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-07-17T09:39:14Z",
+            "description": "",
+            "folder_id": "b1g820nsu4vl828ji8gb",
+            "id": "enpkq1d6q109acv7p7ok",
+            "labels": {},
+            "name": "secure-nat-gateway",
+            "shared_egress_gateway": [
+              {}
+            ],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMCwiZGVsZXRlIjo2MDAwMDAwMDAwMCwidXBkYXRlIjo2MDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_network",
+      "name": "main_vpc",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-07-17T09:39:14Z",
+            "default_security_group_id": "enpgrk0f5a0cd140o1oi",
+            "description": "",
+            "folder_id": "b1g820nsu4vl828ji8gb",
+            "id": "enpl5q29f8c3md8l4f04",
+            "labels": {},
+            "name": "coursework-main-network",
+            "subnet_ids": [
+              "e2l506bph04n0i1ef63j",
+              "e2lbbv138ru3d2rk1u5l",
+              "e9brnmhdah5emmt97lil",
+              "e9bti1rb2b2qj35p3646"
+            ],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMCwiZGVsZXRlIjo2MDAwMDAwMDAwMCwidXBkYXRlIjo2MDAwMDAwMDAwMH19"
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}
