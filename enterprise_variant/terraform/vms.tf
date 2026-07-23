@@ -193,10 +193,31 @@ ansible_ssh_common_args="-o StrictHostKeyChecking=no"
 [public_mgmt:vars]
 ansible_ssh_common_args="-o StrictHostKeyChecking=no"
 EOF
+
+cat <<EOF > ../ansible/prometheus.yml
+${templatefile("../ansible/prometheus.yml.tpl", {
+  web_node_1           = yandex_compute_instance_group.web_group.instances[0].network_interface[0].ip_address
+  web_node_2           = yandex_compute_instance_group.web_group.instances[1].network_interface[0].ip_address
+  prometheus_server   = yandex_compute_instance.prometheus.network_interface[0].ip_address
+  elasticsearch_server = yandex_compute_instance.opensearch.network_interface[0].ip_address
+  bastion_host         = yandex_compute_instance.bastion.network_interface[0].ip_address
+})}
+EOF
 EOT
   }
 
+  # УМНЫЙ RUNNER: ЖДЕТ РЕАЛЬНОГО СТАРТА SSH НА БАСТИОНЕ И ЗАПУСКАЕТ ANSIBLE
   provisioner "local-exec" {
-    command = "sleep 15 && export ANSIBLE_HOST_KEY_CHECKING=False && bash run_ansible.sh"
+    command = <<EOT
+echo "Ozhidaem poyavleniya SSH na Bastione..."
+until nc -z -w 3 ${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} 22; do
+  echo "SSH isheshe ne gotov, spim 5 sekund..."
+  sleep 5
+done
+echo "SSH na Bastione uspeshno podnyalsya! Zapuskaem deploy..."
+export ANSIBLE_HOST_KEY_CHECKING=False
+bash run_ansible.sh
+EOT
   }
 }
+

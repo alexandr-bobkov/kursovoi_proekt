@@ -9,9 +9,9 @@ provider "registry.terraform.io/hashicorp/null" {
 }
 
 provider "registry.terraform.io/yandex-cloud/yandex" {
-  version     = "0.217.0"
+  version     = "0.218.0"
   constraints = ">= 0.100.0"
   hashes = [
-    "h1:VXTyhZ3AmxrmaPUGOoFcQoft6bFOOM+2BzWfRzrZdjs=",
+    "h1:DUpRUJMmVcUhG2TOVWBA13BxWcIrRXs/nH0ES6MN8sc=",
   ]
 }

@@ -3,7 +3,7 @@
   hosts: webservers
   become: yes
   tasks:
-    - name: Proverka активности и запуск системного демона PHP8.4-FPM
+    - name: Verify PHP-FPM daemon status and activation
       systemd:
         name: php8.4-fpm
         state: started

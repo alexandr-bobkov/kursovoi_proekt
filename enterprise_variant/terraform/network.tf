@@ -44,21 +44,27 @@ resource "yandex_vpc_security_group" "bastion_sg" {
   name       = "enterprise-bastion-sg"
   network_id = yandex_vpc_network.main_vpc.id
 
+  # Доступ по SSH оставляем только для твоего ключа
   ingress {
     protocol       = "TCP"
     port           = 22
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
+
+  # ОТКРЫВАЕМ ПАНЕЛЬ GRAFANA ДЛЯ БРАУЗЕРА ПРЕПОДАВАТЕЛЯ СНАРУЖИ
+  ingress {
+    protocol       = "TCP"
+    port           = 3000
+    v4_cidr_blocks = ["0.0.0.0/0"] # Здесь можно прописать конкретный IP препода для ИБ, например ["85.249.x.x/32"]
+  }
+
+  # ОТКРЫВАЕМ ПАНЕЛЬ ELASTICSEARCH/KIBANA СНАРУЖИ (ЕСЛИ ПРИМЕНЯЕТСЯ ПОРТ 5601)
   ingress {
     protocol       = "TCP"
     port           = 5601
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
-  ingress {
-    protocol       = "TCP"
-    port           = 3000
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
+
   egress {
     protocol       = "ANY"
     v4_cidr_blocks = ["0.0.0.0/0"]

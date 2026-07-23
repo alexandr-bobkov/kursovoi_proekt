@@ -55,7 +55,7 @@ resource "yandex_compute_instance" "web_1" {
   network_interface {
     subnet_id          = yandex_vpc_subnet.private_a.id
     nat                = false
-    security_group_ids = [yandex_vpc_security_group.web_sg.id]
+        security_group_ids = [yandex_vpc_security_group.web_sg.id, yandex_vpc_security_group.internal_mgmt_sg.id]
   }
   metadata = {
     ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
@@ -82,7 +82,7 @@ resource "yandex_compute_instance" "web_2" {
   network_interface {
     subnet_id          = yandex_vpc_subnet.private_b.id
     nat                = false
-    security_group_ids = [yandex_vpc_security_group.web_sg.id]
+        security_group_ids = [yandex_vpc_security_group.web_sg.id, yandex_vpc_security_group.internal_mgmt_sg.id]
   }
   metadata = {
     ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"

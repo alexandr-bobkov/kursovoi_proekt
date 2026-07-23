@@ -1,34 +1,53 @@
 ---
-- name: Deploy Elasticsearch Container s modulem xpack
+# ==============================================================================
+# ЧАСТЬ 1: РАЗВЕРТЫВАНИЕ И НАСТРОЙКА ELASTICSEARCH С АВТОРИЗАЦИЕЙ
+# ==============================================================================
+- name: Deploy and Configure Elasticsearch Container
   hosts: logging_storage
   become: true
+  vars:
+    elastic_version: "8.11.3"
+    elastic_work_dir: "/opt/elastic-stack"
   tasks:
-    - name: YA stavlyu sistemnye zavisimosti apt dlya Docker
+    - name: Install system dependencies for Docker
       apt:
-        name: apt-transport-https,ca-certificates,curl,gnupg,lsb-release
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - lsb-release
         state: present
         update_cache: yes
 
-    - name: YA stavlyu sam Docker i plagin compose dlya Debian 13
+    - name: Install Docker and Compose from Debian repository
       apt:
-        name: docker.io,docker-compose-v2
+        name:
+          - docker.io
+          - docker-compose
         state: present
 
-    - name: YA sozdayu rabochuyu papku dlya Elastic
+    - name: Set vm.max_map_count for Elasticsearch in sysctl
+      sysctl:
+        name: vm.max_map_count
+        value: '262144'
+        state: present
+        reload: yes
+
+    - name: Create work directory for Elastic
       file:
-        path: /opt/elastic-stack
+        path: "{{ elastic_work_dir }}"
         state: directory
         mode: '0755'
 
-    - name: YA zapisyvayu konfig docker-compose s moim parolem
+    - name: Write production docker-compose configuration s parolem
       copy:
-        dest: /opt/elastic-stack/docker-compose.yml
+        dest: "{{ elastic_work_dir }}/docker-compose.yml"
         mode: '0644'
         content: |
           version: '3.8'
           services:
             elasticsearch:
-              image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+              image: docker.elastic.co/elasticsearch/elasticsearch:{{ elastic_version }}
               container_name: elasticsearch-storage
               environment:
                 - discovery.type=single-node
@@ -42,5 +61,75 @@
             esdata:
               driver: local
 
-    - name: YA podnimayu conteiner Elasticseach cherez up
-      shell: "docker compose -f /opt/elastic-stack/docker-compose.yml up -d"
+    - name: Restart Elasticsearch container with new settings
+      shell: "docker-compose -f {{ elastic_work_dir }}/docker-compose.yml down && docker-compose -f {{ elastic_work_dir }}/docker-compose.yml up -d"
+
+# ==============================================================================
+# ЧАСТЬ 2: ТВОЯ РАБОЧАЯ УСТАНОВКА FILEBEAT С ЗЕРКАЛА ЯНДЕКСА
+# ==============================================================================
+- name: Deploy Native Filebeat Service on Web Servers
+  hosts: webservers
+  become: yes
+  vars:
+    prefix_net: "https://"
+    host_mirror: "mirror.yandex.ru"
+    pool_path: "/mirrors/elastic/8/pool/main"
+    package_dir: "/f/filebeat"
+    file_deb: "/filebeat-8.11.3-amd64.deb"
+    filebeat_download_url: "{{ [prefix_net, host_mirror, pool_path, package_dir, file_deb] | join('') }}"
+    elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
+  tasks:
+    - name: Skachivanie oficialnogo paketa Filebeat DEB s zerkala Yandeksa
+      get_url:
+        url: "{{ filebeat_download_url }}"
+        dest: /tmp/filebeat.deb
+        mode: '0644'
+
+    - name: Ustanovka Filebeat sluzhby iz lokalnogo fajla DEB
+      apt:
+        deb: /tmp/filebeat.deb
+        state: present
+
+    - name: Zapiss vnutrennego konfiga sbora logov v /etc/filebeat/filebeat.yml
+      copy:
+        dest: /etc/filebeat/filebeat.yml
+        content: |
+          filebeat.inputs:
+          - type: log
+            enabled: true
+            paths: [ /var/log/nginx/access.log ]
+            tags: ["nginx-access"]
+          - type: log
+            enabled: true
+            paths: [ /var/log/nginx/error.log ]
+            tags: ["nginx-error"]
+          - type: log
+            enabled: true
+            paths: [ /var/log/syslog ]
+            tags: ["system-syslog"]
+          - type: log
+            enabled: true
+            paths: [ /var/log/auth.log ]
+            tags: ["system-auth"]
+
+          output.elasticsearch:
+            hosts: ["http://{{ elastic_internal_ip }}:9200"]
+            username: "elastic"
+            password: "BobkovDevOps2026"
+            index: "nginx-logs-%{+yyyy.MM.dd}"
+
+          setup.template.name: "nginx"
+          setup.template.pattern: "nginx-logs-*"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Obnovlenie kesha systemd demonov dlya Filebeat
+      systemd:
+        daemon_reload: yes
+
+    - name: Zapusk i vklyuchenie avtozagruzku sluzhby Filebeat
+      systemd:
+        name: filebeat
+        state: restarted
+        enabled: yes

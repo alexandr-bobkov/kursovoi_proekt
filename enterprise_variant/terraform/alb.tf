@@ -35,8 +35,7 @@ resource "yandex_alb_backend_group" "web_backend_group" {
     name             = "web-http-backend"
     weight           = 1
     port             = 80
-    target_group_ids = [yandex_compute_instance_group.web_group.application_load_balancer.0.target_group_id]
-
+    target_group_ids = [yandex_compute_instance_group.web_group.application_load_balancer[0].target_group_id]
     healthcheck {
       timeout             = "2s"
       interval            = "5s"
@@ -85,7 +84,7 @@ resource "yandex_alb_load_balancer" "web_balancer" {
       address {
         external_ipv4_address {}
       }
-      ports = [443] # FIXED: Ukazali massiv s chistym portom 443 dlya HTTPS
+      ports = [443] # ИСПРАВЛЕНО: Четко задан массив с портом 443
     }
     tls {
       default_handler {
