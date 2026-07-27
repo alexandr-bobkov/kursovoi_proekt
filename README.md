@@ -129,452 +129,1043 @@ Cоздайте ВМ, разверните на ней Elasticsearch. Устан
 Фиолетовые линии — логирование.
 Синяя и зеленая линии — вывод графиков и логов в админки.
 
-📄 1. providers.tf (Настройка провайдера и авторизация)
+📄 2. providers.tf (Настройка провайдера и авторизация)
 
 Этот файл инициализирует и настраивает подключение к облаку Yandex Cloud с использованием твоего сервисного ключа.
 
 ```text
 terraform {
+  # Открывает блок глобальных настроек для самого исполняемого файла Terraform на вашем компьютере
   required_providers {
-    yandex = {                                      # Объявляем, что используем провайдер Yandex Cloud
-      source = "yandex-cloud/yandex"                # Указываем официальный источник провайдера в реестре
+    # Объявляет список провайдеров (плагинов), которые необходимы для работы этого проекта
+    yandex = {
+      # Задает локальное имя для провайдера внутри кода
+      source  = "yandex-cloud/yandex"
+      # Указывает точный адрес в реестре провайдеров, откуда нужно скачать официальный плагин
+      version = ">= 0.100.0"
+      # Задает ограничение на версию плагина (не ниже 0.100.0) для поддержки всех ресурсов
     }
   }
-  required_version = ">= 0.13"                      # Требуем версию Terraform не ниже 0.13 для стабильности
+  required_version = ">= 1.3.0"
+  # Указывает минимальную версию самого CLI-приложения Terraform на вашем ПК для защиты от старого синтаксиса
 }
 
 provider "yandex" {
-  service_account_key_file = "authorized_key.json" # Путь к секретному JSON-ключу  сервисного аккаунта
-  cloud_id                 = var.cloud_id           # ID  глобального облака (берется из переменных)
-  folder_id                = var.folder_id          # ID конкретной папки внутри облака, где создаются ВМ
-  zone                     = var.zone               # Дефолтная зона доступности ( ru-central1-a)
-}
-```
-📄 2. variables.tf (Объявление входных переменных)
-
-```text
-variable "cloud_id" {
-  type        = string                              # Тип данных: строго текстовая строка
-  description = "Идентификатор Yandex Cloud"         # Описание переменной для удобства чтения кода
-}
-
-variable "folder_id" {
-  type        = string                              # Тип данных: строго текстовая строка
-  description = "Идентификатор папки в облаке"     # Указывает, в какой каталог разворачивать ресурсы
-}
-
-variable "zone" {
-  type        = string                              # Тип данных: строго текстовая строка
-  default     = "ru-central1-a"                     # Значение по умолчанию, если не задано иное в .tfvars
-  description = "Дефолтная зона доступности"        # Географическая зона Яндекса для размещения ресурсов
+  # Открывает блок конфигурации провайдера Yandex и передает доступы к вашему облаку
+  service_account_key_file = file("authorized_key.json") 
+  # Функция file() считывает секретный ключ сервисного аккаунта из файла для прохождения авторизации
+  cloud_id                 = var.yc_cloud_id   
+  # Идентификатор  главного «Облака» (Cloud ID), значение берется из переменной
+  folder_id                = var.yc_folder_id  
+  # Идентификатор конкретного «Каталога» (Folder ID), где будут создаваться все ресурсы
+  zone                     = var.yc_zone_default  
+  # Задает зону доступности по умолчанию (например, ru-central1-a) из переменной
 }
 ```
 
 📄 3. network.tf (Топология сети и NAT-шлюз)Этот файл описывает создание изолированного виртуального облака (VPC), деление его на публичную и приватные подсети, а также настройку NAT-шлюза, чтобы изолированные серверы имели безопасный доступ в интернет за обновлениями.
 
 ```text
-resource "yandex_vpc_network" "default" {
-  name        = "kursovoi-network"                  # Имя нашей виртуальной сети (VPC) для группировки ресурсов
-  description = "Глобальная сеть для курсового проекта" # Описание назначения сети для топологии
+# Создание виртуальной частной сети (VPC) для изоляции всей инфраструктуры курсовой работы
+resource "yandex_vpc_network" "main_vpc" {
+  # Понятное текстовое имя сети, которое отобразится в консоли Yandex Cloud
+  name = "coursework-main-network"
 }
 
-resource "yandex_vpc_gateway" "nat_gateway" {
-  name = "egress-nat-gateway"                       # Создаем NAT-шлюз для безопасного исходящего трафика
-  shared_egress_gateway {}                           # Включаем стандартный шлюз распределения адресов Яндекса
-}
-
-resource "yandex_vpc_route_table" "private_rt" {
-  name       = "private-route-table"                # Таблица маршрутизации для внутренних изолированных серверов
-  network_id = yandex_vpc_network.default.id        # Привязываем таблицу к нашей созданной глобальной сети
-
-  static_route {
-    destination_prefix = "0.0.0.0/0"                # Перенаправляем абсолютно весь исходящий интернет-трафик...
-    gateway_id = yandex_vpc_gateway.nat_gateway.id  # ...строго через созданный выше NAT-шлюз Яндекса
+# --- 2. СТАТИЧЕСКИЙ АДРЕС БАЛАНСИРОВЩИКА (Требуется для alb.tf) ---
+# Резервирование постоянного внешнего IP-адреса, который не изменится при перезапусках балансировщика
+resource "yandex_vpc_address" "alb_address" {
+  # Имя ресурса статического IP-адреса в консоли облака
+  name = "static-balancer-address"
+  # Блок описания типа адреса (внешний IPv4)
+  external_ipv4_address {
+    # Привязка адреса к конкретной зоне доступности (выбрана зона А)
+    zone_id = "ru-central1-a"
   }
 }
 
+# Описание публичной подсети в зоне А для размещения внешних ресурсов (например, балансировщика)
 resource "yandex_vpc_subnet" "public_a" {
-  name           = "public-subnet-a"                # Публичная подсеть для балансировщика и бастиона
-  zone           = "ru-central1-a"                  # Географическая зона Яндекса (ru-central1-a)
-  network_id     = yandex_vpc_network.default.id    # Идентификатор нашей глобальной виртуальной сети
-  v4_cidr_blocks = ["10.0.1.0/24"]                  # Диапазон IP-адресов подсети (до 254 хостов)
+  # Имя подсети для отображения в веб-интерфейсе облака
+  name           = "public-subnet-zone-a"
+  # Физическая зона доступности дата-центра Яндекса
+  zone           = "ru-central1-a"
+  # Идентификатор основной сети VPC, к которой привязывается эта подсеть
+  network_id     = yandex_vpc_network.main_vpc.id
+  # Диапазон приватных IP-адресов подсети в формате CIDR (до 256 адресов)
+  v4_cidr_blocks = ["10.0.1.0/24"]
 }
 
+# Публичная подсеть Б (Зона Б - Требуется для alb.tf)
+# Описание второй публичной подсети для обеспечения отказоустойчивости балансировщика по зонам
+resource "yandex_vpc_subnet" "public_b" {
+  # Текстовое имя второй публичной подсети
+  name           = "public-subnet-zone-b"
+  # Вторая зона доступности для распределения нагрузки
+  zone           = "ru-central1-b"
+  # Связь подсети с ранее созданной единой сетью VPC
+  network_id     = yandex_vpc_network.main_vpc.id
+  # Выделенный непересекающийся диапазон IP-адресов для зоны Б
+  v4_cidr_blocks = ["10.0.2.0/24"]
+}
+
+# Приватная подсеть А (Зона А)
+# Создание защищенной подсети в зоне А, у машин в которой не будет прямых внешних IP-адресов
 resource "yandex_vpc_subnet" "private_a" {
-  name           = "private-subnet-a"               # Приватная подсеть А для web-server-1 и prometheus
-  zone           = "ru-central1-a"                  # Зона размещения (ru-central1-a)
-  network_id     = yandex_vpc_network.default.id    # Связь с глобальной виртуальной сетью проекта
-  v4_cidr_blocks = ["10.0.10.0/24"]                 # Изолированный диапазон внутренних IP-адресов
-  route_table_id = yandex_vpc_route_table.private_rt.id # Принудительно подключаем NAT для выхода в интернет
+  # Имя приватной подсети для зоны А
+  name           = "private-subnet-zone-a"
+  # Локация подсети в зоне А
+  zone           = "ru-central1-a"
+  # Привязка к единой облачной сети проекта
+  network_id     = yandex_vpc_network.main_vpc.id
+  # Внутренний диапазон IP-адресов для серверов приложений и баз данных этой зоны
+  v4_cidr_blocks = ["10.0.10.0/24"]
+  # Привязка таблицы маршрутизации, которая направит исходящий трафик через NAT-шлюз
+  route_table_id = yandex_vpc_route_table.nat_route_table.id
 }
 
+# Приватная подсеть Б (Зона Б)
+# Создание аналогичной защищенной подсети во второй зоне для резервирования бэкендов и баз данных
 resource "yandex_vpc_subnet" "private_b" {
-  name           = "private-subnet-b"               # Приватная подсеть Б для резервного web-server-2 и Elasticsearch
-  zone           = "ru-central1-b"                  # Зона размещения (ru-central1-b) для отказоустойчивости
-  network_id     = yandex_vpc_network.default.id    # Идентификатор основной сети VPC
-  v4_cidr_blocks = ["10.0.20.0/24"]                 # Выделенный изолированный сегмент адресов
-  route_table_id = yandex_vpc_route_table.private_rt.id # Включаем маршрут в интернет через NAT-шлюз
+  # Имя приватной подсети для зоны Б
+  name           = "private-subnet-zone-b"
+  # Локация подсети в зоне Б
+  zone           = "ru-central1-b"
+  # Привязка к единой облачной сети проекта
+  network_id     = yandex_vpc_network.main_vpc.id
+  # Выделенный внутренний диапазон IP-адресов для ресурсов зоны Б
+  v4_cidr_blocks = ["10.0.20.0/24"]
+  # Назначение той же таблицы маршрутизации с NAT-шлюзом для выхода в интернет
+  route_table_id = yandex_vpc_route_table.nat_route_table.id
 }
-```
-📄 4. security.tf (Файрвол и группы безопасности)Здесь мы жестко регламентируем правила фильтрации портов (Network Security Groups), закрывая все лишние доступы снаружи.
-```text
-resource "yandex_vpc_security_group" "bastion_sg" {
-  name        = "bastion-security-group"            # Группа безопасности для управляющего сервера (Бастиона)
-  network_id  = yandex_vpc_network.default.id       # Привязка правил к сети нашего проекта
 
-  ingress {
-    protocol       = "TCP"                          # Протокол передачи данных
-    description    = "Доступ администратора по SSH"  # Пояснение назначения правила для аудита
-    v4_cidr_blocks = ["0.0.0.0/0"]                  # Разрешаем входящий SSH-подход с любого IP-адреса мира
-    port           = 22                             # Стандартный порт защищенного туннеля SSH
+# --- 4. NAT-ШЛЮЗ ДЛЯ ВЫХОДА В ИНТЕРНЕТ (ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ) ---
+# Создание сетевого шлюза для безопасного обновления ОС и скачивания пакетов на приватных ВМ
+resource "yandex_vpc_gateway" "nat_gateway" {
+  # Системное имя шлюза в каталоге Yandex Cloud
+  name = "secure-nat-gateway"
+  # Пустой блок конфигурации, активирующий стандартный общий исходящий NAT от Яндекса
+  shared_egress_gateway {}
+}
+
+# Создание таблицы маршрутизации для управления приватным трафиком
+resource "yandex_vpc_route_table" "nat_route_table" {
+  # Название таблицы маршрутизации в интерфейсе облака
+  name       = "internal-nat-route-table"
+  # Привязка таблицы к нашей основной сети
+  network_id = yandex_vpc_network.main_vpc.id
+  # Статический маршрут по умолчанию (для всех неизвестных адресов в интернете)
+  static_route {
+    # Маска 0.0.0.0/0 означает абсолютно весь внешний трафик интернета
+    destination_prefix = "0.0.0.0/0"
+    # Указание перенаправлять этот трафик на созданный выше NAT-шлюз
+    gateway_id         = yandex_vpc_gateway.nat_gateway.id
   }
+}
 
+# Группа балансировщика трафика
+# Настройка сетевого экрана (Файрвола) специально для входящего трафика Application Load Balancer
+resource "yandex_vpc_security_group" "alb_sg" {
+  # Имя группы безопасности балансировщика
+  name       = "security-group-load-balancer"
+  # Привязка файрвола к общей сети
+  network_id = yandex_vpc_network.main_vpc.id
+  # Блок правил для входящего трафика (Ingress)
   ingress {
-    protocol       = "TCP"                          # Протокол управления трафиком
-    description    = "Доступ к панелям Grafana"     # Авторизованный вход в веб-интерфейс метрик
-    v4_cidr_blocks = ["0.0.0.0/0"]                  # Открытый доступ для мониторинга извне
-    port           = 3000                           # Порт веб-интерфейса Grafana
+    # Разрешенный сетевой протокол
+    protocol       = "TCP"
+    # Разрешить подключение абсолютно любым внешним клиентам из интернета
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Открыть стандартный порт HTTP для веб-сайта
+    port           = 80
   }
-
-  ingress {
-    protocol       = "TCP"                          # Протокол управления трафиком
-    description    = "Доступ к дашбордам Kibana"    # Авторизованный вход в веб-интерфейс логов
-    v4_cidr_blocks = ["0.0.0.0/0"]                  # Внешний доступ к аналитике текстовых индексов
-    port           = 5601                           # Порт веб-интерфейса Kibana
-  }
-
+  # Блок правил для исходящего трафика (Egress)
   egress {
-    protocol       = "ANY"                          # Разрешаем абсолютно любой исходящий трафик
-    description    = "Свободный исход хоста"        # Бастиону нужно качать обновления и слать запросы базам
-    v4_cidr_blocks = ["0.0.0.0/0"]                  # Направление: в любую сеть без ограничений
-    from_port      = 0                              # Полный диапазон портов (старт)
-    to_port        = 65535                          # Полный диапазон портов (конец)
+    # Разрешить балансировщику отправлять любые пакеты
+    protocol       = "ANY"
+    # Разрешить отправку трафика на любые IP-адреса (включая бэкенд ВМ в приватных сетях)
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Открыть полный диапазон портов для отправки данных бэкендам
+    from_port      = 0
+    to_port        = 65535
   }
 }
+
+# Сквозное правило для приватной сети (Решает проблему связи ELK и Prometheus)
+# Группа безопасности, разрешающая беспрепятственный обмен трафиком между всеми внутренними серверами
+resource "yandex_vpc_security_group" "internal_shared_rule" {
+  # Имя сквозного внутреннего правила безопасности
+  name       = "internal-shared-rule"
+  # Привязка к нашей сети проекта
+  network_id = yandex_vpc_network.main_vpc.id
+  # Входящие правила для внутренней сети
+  ingress {
+    # Разрешить любые протоколы (TCP, UDP, ICMP) внутри локальной сети
+    protocol       = "ANY"
+    # Ограничить действие правила только адресами из подсетей 10.0.0.0/16
+    v4_cidr_blocks = ["10.0.0.0/16"]
+    # Разрешить все порты для связи систем мониторинга и сбора логов
+    from_port      = 0
+    to_port        = 65535
+  }
+  # Исходящие правила для внутренней сети
+  egress {
+    # Разрешить серверам отправлять любые типы пакетов
+    protocol       = "ANY"
+    # Разрешить отправку в любом направлении (нужно для работы NAT-шлюза в интернет)
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Разрешить отправку на любые порты назначения
+    from_port      = 0
+    to_port        = 65535
+  }
+}
+
+# Настройка файрвола непосредственно для виртуальных машин, на которых работает сайт
+resource "yandex_vpc_security_group" "web_sg" {
+  # Понятное имя группы безопасности веб-серверов
+  name       = "web-servers-security-group"
+  # Привязка к единой сети проекта
+  network_id = yandex_vpc_network.main_vpc.id
+  # Правило, разрешающее входящие запросы от балансировщика нагрузок
+  ingress {
+    # Протокол для передачи HTTP-трафика
+    protocol          = "TCP"
+    # Вместо IP-адресов источником трафика жестко указывается группа безопасности балансировщика alb_sg
+    security_group_id = yandex_vpc_security_group.alb_sg.id
+    # Порт 80, на котором веб-сервер (например, Nginx) ожидает запросы
+    port              = 80
+  }
+  # Правило для служебного входящего трафика из локальной сети
+  ingress {
+    # Разрешить любые протоколы для внутренних систем
+    protocol       = "ANY"
+    # Разрешить запросы только из внутренней адресации 10.0.0.0/16 (например, для агентов мониторинга)
+    v4_cidr_blocks = ["10.0.0.0/16"]
+    # Диапазон открытых портов для внутренних систем
+    from_port      = 0
+    to_port        = 65535
+  }
+  # Исходящие правила для веб-серверов
+  egress {
+    # Разрешить отвечать на запросы и отправлять пакеты по любому протоколу
+    protocol       = "ANY"
+    # Разрешить отправку данных в любом направлении (в интернет через NAT или соседним ВМ)
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Полный диапазон портов для исходящих соединений
+    from_port      = 0
+    to_port        = 65535
+  }
+}
+
+# Группа безопасности для администрирования и управления внутренней инфраструктурой
+resource "yandex_vpc_security_group" "internal_mgmt_sg" {
+  # Название группы безопасности внутреннего менеджмента
+  name       = "internal-management-security-group"
+  # Привязка к текущей сети VPC
+  network_id = yandex_vpc_network.main_vpc.id
+  # Разрешить входящий трафик для внутренних управляющих утилит
+  ingress {
+    # Разрешить любой тип протокола обмена данными
+    protocol       = "ANY"
+    # Разрешить подключения только от серверов внутри сети (диапазон 10.0.0.0/16)
+    v4_cidr_blocks = ["10.0.0.0/16"]
+    # Открыть все порты для беспрепятственного управления компонентами
+    from_port      = 0
+    to_port        = 65535
+  }
+  # Разрешить исходящий трафик для управляющих компонентов
+  egress {
+    # Любой протокол для отправки команд и получения обновлений
+    protocol       = "ANY"
+    # Разрешить отправку пакетов куда угодно (например, к репозиториям обновлений в интернете)
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Открыть все порты назначения для исходящего направления
+    from_port      = 0
+    to_port        = 65535
+  }
+}
+
+# Настройка группы безопасности для Бастион-хоста (прыжкового сервера доступа и мониторинга)
+resource "yandex_vpc_security_group" "bastion_sg" {
+  # Название группы файрвола для бастионной ВМ
+  name       = "bastion-security-group"
+  # Привязка к VPC сети проекта
+  network_id = yandex_vpc_network.main_vpc.id
+
+  # Правило, открывающее доступ к управлению сервером снаружи по SSH
+  ingress {
+    # Протокол управления SSH
+    protocol       = "TCP"
+    # Поясняющий комментарий к правилу
+    description    = "Allow SSH from anywhere"
+    # Разрешить подключаться к бастиону администратору с любого IP-адреса в интернете
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Стандартный порт SSH-доступа
+    port           = 22
+  }
+
+  # Открываем порт 5601 для Kibana внутри ресурса
+  # Правило, позволяющее заходить в веб-интерфейс Kibana для просмотра логов
+  ingress {
+  # Сетевой протокол для передачи веб-трафика панели управленияp 
+  rotocol       = "TCP" 
+  # Назначение правила (доступ к дашбордам логов ELK)
+  description    = "Allow Kibana UI for online-commission"
+  # Разрешить доступ к Kibana с любого внешнего IP-адреса в интернете
+  v4_cidr_blocks = ["0.0.0.0/0"]
+  # Стандартный сетевой порт, на котором работает веб-интерфейс Kibana
+  port           = 5601
+  }
+
+  # Открываем порт 3000 для Grafana внутри ресурса
+  # Правило, позволяющее заходить в веб-интерфейс Grafana для анализа графиков мониторинга
+  ingress {
+    # Сетевой протокол для работы веб-интерфейса аналитики
+    protocol       = "TCP"
+    # Назначение правила (доступ к дашбордам метрик Prometheus/Zabbix)
+    description    = "Allow Grafana UI for online-commission"
+    # Разрешить открывать Grafana с любого компьютера из внешней сети интернет
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Стандартный сетевой порт, используемый сервером Grafana по умолчанию
+    port           = 3000
+    }
+    
+  # Блок описания исходящих правил (Egress) для бастион-хоста / сервера мониторинга
+  egress {
+    # Разрешить серверу отправлять любые типы сетевых пакетов (TCP, UDP, ICMP)
+    protocol       = "ANY"
+    # Разрешить отправку трафика на любые IP-адреса (в интернет за пакетами и к внутренним ВМ)
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    # Открыть полный диапазон портов для исходящих запросов от системы управления
+    from_port      = 0
+    to_port        = 65535
+  }
+}
+
 ```
+
 
 📄 5. vms.tf (Конфигурация виртуальных машин и триггер автозапуска). Создаем все виртуальные машины в облаке, прописывает им ядра, память, диски, внедряет публичные SSH-ключи через metadata и запускает скрипт старта Ansible плейбуков, как только серверы станут доступны
 
 ```text
-# Описываем конфигурацию машины Бастион-хоста
+# ==============================================================================
+# КОНФИГУРАЦИЯ ВИРТУАЛЬНЫХ МАШИН ДЛЯ КУРСОВОГО ПРОЕКТА
+# Студент: Бобков А.К.
+# ==============================================================================
+
+# --- ДИНАМИЧЕСКИЙ СБОР САМОГО СВЕЖЕГО ОБРАЗА DEBIAN 13 ИЗ МАРКЕТПЛЕЙСА ---
+# Источник данных для автоматического поиска актуального ID операционной системы Debian 13
+data "yandex_compute_image" "debian_13" {
+  # Поиск в официальном репозитории Яндекса по семейству операционной системы
+  family = "debian-13"
+}
+
+# --- 1. БАСТИОН-ХОСТ (SECURE JUMP HOST) ---
+# Описание виртуальной машины Бастион-хоста, которая служит единой точкой входа для управления
 resource "yandex_compute_instance" "bastion" {
-  name        = "bastion-host"                     # Уникальное сетевое имя виртуальной машины в облаке
-  hostname    = "bastion-host"                     # Имя хоста внутри самой операционной системы Linux
-  zone        = "ru-central1-a"                    # Размещаем в публичной зоне ru-central1-a
-  platform_id = "standard-v3"                      # Архитектура процессора (Intel Ice Lake)
-
-  resources {
-    cores  = 2                                     # Выделяем 2 виртуальных ядра процессора (vCPU)
-    memory = 2                                     # Выделяем 2 Гигабайта оперативной памяти (RAM)
-  }
-
-  boot_disk {
-    initialize_params {
-      image_id = "fd80le9bkv3lsgndf9qa"            # ID официального образа Ubuntu 22.04 LTS в репозитории Яндекса
-      size     = 15                                # Объем системного диска: 15 Гигабайт (SSD)
-      type     = "network-ssd"                     # Быстрый сетевой твердотельный накопитель
-    }
-  }
-
-  network_interface {
-    subnet_id = yandex_vpc_subnet.public_a.id      # Подключаем к публичной подсети public-subnet-a
-    nat       = true                               # Выделяем внешний публичный IP-адрес для доступа из интернета
-  }
-
-  metadata = {
-    ssh-keys = "user:${file("~/.ssh/id_rsa.pub")}" # Пробрасываем твой публичный ключ для беспарольного входа по SSH
-  }
-}
-
-# Шаблонная конфигурация для первого веб-сервера (Production Node)
-resource "yandex_compute_instance" "web1" {
-  name        = "web-server-1"
-  hostname    = "web-server-1"
-  zone        = "ru-central1-a"                    # Размещаем в приватной подсети зоны А
+  # Имя виртуальной машины в веб-консоли Yandex Cloud
+  name        = "bastion-host"
+  # Внутреннее доменное имя (hostname) внутри операционной системы Linux
+  hostname    = "bastion-host"
+  # Использование современной аппаратной платформы Intel Ice Lake (standard-v3)
   platform_id = "standard-v3"
+  # Размещение машины в физическом дата-центре зоны А (ru-central1-a)
+  zone        = "ru-central1-a"
 
+  # Выделение вычислительных ресурсов для виртуальной машины
   resources {
-    cores  = 2                                     # 2 ядра vCPU для обработки Nginx + PHP-FPM
-    memory = 2                                     # 2 ГБ оперативной памяти
-  }
-
-  boot_disk {
-    initialize_params {
-      image_id = "fd80le9bkv3lsgndf9qa"            # Ubuntu 22.04 LTS
-      size     = 15
-      type     = "network-hdd"                     # Стандартный сетевой диск для экономии бюджета
-    }
-  }
-
-  network_interface {
-    subnet_id          = yandex_vpc_subnet.private_a.id # Изолированная приватная подсеть А
-    nat                = false                     # Внешний IP отключен! Сервер полностью скрыт от интернета
-    security_group_ids = [yandex_vpc_security_group.private_sg.id] # Подключаем внутренний файрвол
-  }
-
-  metadata = {
-    ssh-keys = "user:${file("~/.ssh/id_rsa.pub")}"
-  }
-}
-
-# Конфигурация для второго веб-сервера (Backup Node)
-resource "yandex_compute_instance" "web2" {
-  name        = "web-server-2"
-  hostname    = "web-server-2"
-  zone        = "ru-central1-b"                    # Выносим в зону Б для обеспечения отказоустойчивости (High Availability)
-  platform_id = "standard-v3"
-
-  resources {
+    # Выделение 2 виртуальных процессорных ядер (vCPU)
     cores  = 2
+    # Выделение 2 Гигабайт оперативной памяти (RAM)
     memory = 2
   }
-
+  
+  # Настройка параметров загрузочного системного диска
   boot_disk {
+    # Блок инициализации параметров диска
     initialize_params {
-      image_id = "fd80le9bkv3lsgndf9qa"
-      size     = 15
-      type     = "network-hdd"
+      # Автоматическая подстановка актуального ID образа Debian 13, найденного блоком data выше
+      image_id = data.yandex_compute_image.debian_13.id
+      # Объем сетевого диска в Гигабайтах (10 ГБ достаточно для базовой ОС)
+      size     = 10
     }
   }
-
+  
+  # Конфигурация сетевого подключения (сетевой карты) машины
   network_interface {
-    subnet_id          = yandex_vpc_subnet.private_b.id # Подключаем к приватной подсети Б
-    nat                = false                     # Полная изоляция от внешнего мира
-    security_group_ids = [yandex_vpc_security_group.private_sg.id]
+    # Размещение Бастиона в созданной ранее ПУБЛИЧНОЙ подсети зоны А
+    subnet_id          = yandex_vpc_subnet.public_a.id
+    # Включение NAT (выделение внешнего публичного IP-адреса) для связи с интернетом
+    nat                = true
+    # Привязка файрвола (группы безопасности), открывающего порты SSH, Grafana и Kibana
+    security_group_ids = [yandex_vpc_security_group.bastion_sg.id]
   }
-
+  
+  # Блок передачи метаданных для автоматической настройки ВМ при старте (Cloud-Init)
   metadata = {
-    ssh-keys = "user:${file("~/.ssh/id_rsa.pub")}"
+    # Импорт вашего публичного SSH-ключа для безопасного беспарольного доступа пользователя debian
+    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
   }
 }
 
-# Виртуальная машина для центрального сервера сбора метрик Prometheus
-resource "yandex_compute_instance" "prometheus" {
-  name        = "prometheus-server"
-  hostname    = "prometheus-server"
+# --- 2. ПЕРВЫЙ ОСНОВНОЙ ВЕБ-СЕРВЕР (WEB-1) ---
+# Описание первого бэкенд-сервера, на котором будет развернут веб-сайт под управлением Nginx
+resource "yandex_compute_instance" "web_1" {
+  # Имя первой веб-машины в панели облака Yandex Cloud
+  name        = "web-server-1"
+  # Сетевое имя (hostname) внутри локальной операционной системы Linux
+  hostname    = "web1"
+  # Использование платформы Intel Ice Lake (standard-v3)
+  platform_id = "standard-v3"
+  # Размещение сервера в зоне доступности А (ru-central1-a)
   zone        = "ru-central1-a"
-  platform_id = "standard-v3"
 
+  # Выделение аппаратных ресурсов для веб-приложения
   resources {
+    # Выделение 2 виртуальных процессорных ядер
     cores  = 2
-    memory = 2                                     # Минимально необходимый объем для базы временных рядов TSDB
+    # Выделение 2 Гигабайт оперативной памяти
+    memory = 2
   }
-
+  
+  # Параметры загрузочного диска для первого веб-сервера
   boot_disk {
+    # Блок инициализации параметров системного диска
     initialize_params {
-      image_id = "fd80le9bkv3lsgndf9qa"
-      size     = 20                                # Выделяем 20 ГБ для хранения истории метрик мониторинга
-      type     = "network-hdd"
+      # Накатывание на диск чистого образа Debian 13
+      image_id = data.yandex_compute_image.debian_13.id
+      # Объем диска увеличен до 15 ГБ для запаса под файлы веб-сайта и логи
+      size     = 15
     }
   }
-
+  
+  # Конфигурация сетевой карты для работы внутри приватного контура
   network_interface {
-    subnet_id          = yandex_vpc_subnet.private_a.id # Размещаем рядом с первым веб-сервером в приватной зоне А
+    # Размещение сервера в ПРИВАТНОЙ подсети зоны А (защита от прямого доступа из интернета)
+    subnet_id          = yandex_vpc_subnet.private_a.id
+    # Выключение NAT: у машины не будет публичного IP-адреса, вход в интернет только через NAT-шлюз
     nat                = false
-    security_group_ids = [yandex_vpc_security_group.private_sg.id]
+    # Привязка двух групп безопасности: для веб-трафика от балансировщика и для внутреннего управления
+    security_group_ids = [yandex_vpc_security_group.web_sg.id, yandex_vpc_security_group.internal_mgmt_sg.id]
   }
-
+  
+  # Передача метаданных для авторизации администратора
   metadata = {
-    ssh-keys = "user:${file("~/.ssh/id_rsa.pub")}"
+    # Проброс публичного SSH-ключа для настройки сервера через Ansible со стороны Бастиона
+    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
   }
 }
 
-# Тяжелая виртуальная машина для базы данных и поискового движка логов Elasticsearch
-resource "yandex_compute_instance" "elasticsearch" {
-  name        = "elasticsearch-storage"
-  hostname    = "elasticsearch-storage"
-  zone        = "ru-central1-b"                    # Размещаем в приватной подсети зоны Б
+# --- 3. ВТОРОЙ РЕЗЕРВНЫЙ ВЕБ-СЕРВЕР (WEB-2) ---
+# Описание второго бэкенд-сервера для обеспечения отказоустойчивости архитектуры
+resource "yandex_compute_instance" "web_2" {
+  # Имя второй веб-машины в панели управления Yandex Cloud
+  name        = "web-server-2"
+  # Внутреннее доменное имя (hostname) внутри операционной системы Linux
+  hostname    = "web2"
+  # Использование аппаратной платформы Intel Ice Lake (standard-v3)
   platform_id = "standard-v3"
+  # Отказоустойчивость: размещение сервера во второй зоне доступности — Б (ru-central1-b)
+  zone        = "ru-central1-b"
 
+  # Выделение вычислительных ресурсов (аппаратный профиль)
   resources {
-    cores  = 2                                     # 2 ядра vCPU
-    memory = 4                                     # Выделяем повышенный объем (4 ГБ RAM) — Elasticsearch требователен к памяти Java VM
+    # Выделение 2 виртуальных процессорных ядер
+    cores  = 2
+    # Выделение 2 Гигабайт оперативной памяти
+    memory = 2
   }
-
+  
+  # Настройка параметров загрузочного системного диска
   boot_disk {
+    # Блок инициализации параметров диска
     initialize_params {
-      image_id = "fd80le9bkv3lsgndf9qa"
-      size     = 30                                # Выделяем 30 ГБ под хранение индексов текстовых логов
-      type     = "network-ssd"                     # Используем быстрый SSD, так как БД выполняет много операций чтения/записи
+      # Накатывание на диск чистого образа Debian 13
+      image_id = data.yandex_compute_image.debian_13.id
+      # Выделение 15 ГБ пространства (идентично первому веб-серверу)
+      size     = 15
     }
   }
-
+  
+  # Конфигурация сетевой карты для работы внутри приватного контура
   network_interface {
+    # Размещение сервера в ПРИВАТНОЙ подсети зоны Б (private_b) для изоляции от интернета
     subnet_id          = yandex_vpc_subnet.private_b.id
+    # Отключение прямого внешнего IP-адреса (вход в интернет только через NAT-шлюз)
     nat                = false
-    security_group_ids = [yandex_vpc_security_group.private_sg.id]
+    # Привязка файрволов: для трафика от балансировщика и для управления со стороны Бастиона
+    security_group_ids = [yandex_vpc_security_group.web_sg.id, yandex_vpc_security_group.internal_mgmt_sg.id]
   }
-
+  
+  # Блок передачи метаданных для Cloud-Init конфигурации
   metadata = {
-    ssh-keys = "user:${file("~/.ssh/id_rsa.pub")}"
+    # Проброс вашего публичного SSH-ключа для беспарольного доступа пользователя debian
+    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
   }
 }
 
-# Автоматическая генерация файла инвентаря hosts.ini для Ansible сразу после создания инфраструктуры
-resource "local_file" "ansible_inventory" {
-  filename = "../ansible/hosts.ini"                # Путь, куда сохранить сгенерированный конфигурационный файл
+# --- 4. СЕРВЕР МОНИТОРИНГА PROMETHEUS ---
+# Выделенная виртуальная машина для развертывания ядра системы мониторинга Prometheus
+resource "yandex_compute_instance" "prometheus" {
+  # Системное имя сервера мониторинга в консоли Яндекса
+  name        = "prometheus-server"
+  # Сетевое имя (hostname) внутри локальной ОС Linux
+  hostname    = "prometheus-server"
+  # Использование платформы Intel Ice Lake (standard-v3)
+  platform_id = "standard-v3"
+  # Размещение машины в зоне доступности А (ru-central1-a)
+  zone        = "ru-central1-a"
 
-  content = <<EOT
-[bastion]
-bastion-host ansible_host=${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} ansible_user=user
-
-[web]
-web-server-1 ansible_host=${yandex_compute_instance.web1.network_interface.0.ip_address} ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'
-web-server-2 ansible_host=${yandex_compute_instance.web2.network_interface.0.ip_address} ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'
-
-[monitoring]
-prometheus-server ansible_host=${yandex_compute_instance.prometheus.network_interface.0.ip_address} ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'
-
-[logging]
-elasticsearch-storage ansible_host=${yandex_compute_instance.elasticsearch.network_interface.0.ip_address} ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'
-EOT
+  # Конфигурация мощностей сервера мониторинга
+  resources {
+    # Выделение 2 виртуальных процессорных ядер
+    cores  = 2
+    # Выделение 2 Гигабайт оперативной памяти
+    memory = 2
+  }
+  
+  # Конфигурация дисковой подсистемы
+  boot_disk {
+    # Блок инициализации системного диска
+    initialize_params {
+      # Установка базовой операционной системы Debian 13
+      image_id = data.yandex_compute_image.debian_13.id
+      # Объем диска увеличен до 20 ГБ для хранения базы данных временных рядов (TSDB) Prometheus
+      size     = 20
+    }
+  }
+  
+  # Сетевые параметры для интеграции в общую сеть
+  network_interface {
+    # Размещение в приватном контуре зоны А (запросы наружу идут через NAT-шлюз)
+    subnet_id          = yandex_vpc_subnet.private_a.id
+    # Выключение внешнего адреса (прямой доступ из интернета закрыт ради безопасности)
+    nat                = false
+    # Привязка группы безопасности для свободного обмена трафиком управления внутри подсетей
+    security_group_ids = [yandex_vpc_security_group.internal_mgmt_sg.id]
+  }
+  
+  # Метаданные авторизации администратора
+  metadata = {
+    # Импорт публичного SSH-ключа для последующего деплоя сервисов через Ansible
+    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
+  }
 }
 
-# Триггер local-exec, запускающий установку сервисов через автоматический bash-скрипт run_ansible.sh
-resource "null_resource" "ansible_trigger" {
+# --- 5. БАЗА ДАННЫХ ЛОГОВ ELASTICSEARCH ---
+# Создание отдельного сервера для централизованного хранения и индексации системных логов
+resource "yandex_compute_instance" "opensearch" {
+  # Техническое имя ресурса в панели облака (внутри будет развернут классический Elasticsearch)
+  name        = "elasticsearch-storage"
+  # Внутренний hostname сервера в локальной сети
+  hostname    = "elasticsearch-storage"
+  # Использование платформы Intel Ice Lake (standard-v3)
+  platform_id = "standard-v3"
+  # Локация сервера в зоне доступности А (ru-central1-a)
+  zone        = "ru-central1-a"
+
+  # Ресурсы повышенной мощности для работы тяжелой СУБД логов
+  resources {
+    # Выделение 2 виртуальных процессорных ядер
+    cores  = 2
+    # Выделение 4 Гигабайт оперативной памяти (Elasticsearch требует больше RAM для кэширования индексов)
+    memory = 4
+  }
+  
+  # Конфигурация дисковой подсистемы под логи
+  boot_disk {
+    # Блок инициализации накопителя
+    initialize_params {
+      # Развертывание операционной системы Debian 13
+      image_id = data.yandex_compute_image.debian_13.id
+      # Объем диска увеличен до 25 ГБ, так как текстовые логи занимают много физического места
+      size     = 25
+    }
+  }
+  
+  # Сетевые настройки сервера базы данных логов
+  network_interface {
+    # Размещение в защищенной приватной подсети зоны А
+    subnet_id          = yandex_vpc_subnet.private_a.id
+    # Полное отключение внешнего IP (сервер доступен только для внутренних шипперов логов)
+    nat                = false
+    # Привязка файрвола, разрешающего внутренний обмен данными с серверами приложений
+    security_group_ids = [yandex_vpc_security_group.internal_mgmt_sg.id]
+  }
+  
+  # Метаданные для первоначальной настройки системы безопасности ВМ
+  metadata = {
+    # Проброс публичного ключа SSH для авторизации Ansible-скриптов
+    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
+  }
+}
+
+# --- АВТОМАТИЧЕСКИЙ ДЕПЛОЙ ИНФРАСТРУКТУРЫ ANSIBLE ---
+# Логический ресурс Terraform, который запускает внешние локальные скрипты конфигурации после создания ВМ
+resource "null_resource" "ansible_auto_run" {
+  # Строгое условие: скрипт не начнется, пока все 5 виртуальных машин не перейдут в статус Running
   depends_on = [
-    yandex_compute_instance.bastion,               # Ждем, пока полностью создадутся все виртуальные хосты
-    yandex_compute_instance.web1,
-    yandex_compute_instance.web2,
+    yandex_compute_instance.bastion,
+    yandex_compute_instance.web_1,
+    yandex_compute_instance.web_2,
     yandex_compute_instance.prometheus,
-    yandex_compute_instance.elasticsearch,
-    local_file.ansible_inventory                   # Ждем завершения генерации файла hosts.ini
+    yandex_compute_instance.opensearch
   ]
 
+  # Шаг А: Автоматически создаем инвентарь hosts.ini, динамически подставляя реальные IP-адреса из облака
   provisioner "local-exec" {
-    command = "bash run_ansible.sh"               # Вызываем наш технический bash-скрипт автоматизации
+    # Многострочная Bash-команда для перезаписи файла конфигурации Ansible
+    command = <<EOT
+cat <<EOF > ../ansible/hosts.ini
+[bastion]
+# Прописываем публичный IP-адрес Бастион-хоста для SSH-доступа администратора
+bastion_host ansible_host=${yandex_compute_instance.bastion.network_interface[0].nat_ip_address} ansible_user=debian
+
+[webservers]
+# Динамически подставляем приватные IP-адреса веб-серверов
+web1 ansible_host=${yandex_compute_instance.web_1.network_interface[0].ip_address} ansible_user=debian
+web2 ansible_host=${yandex_compute_instance.web_2.network_interface[0].ip_address} ansible_user=debian
+
+[logging_storage]
+# Прописываем приватный IP-адрес сервера Elasticsearch для отправки логов
+elasticsearch_server ansible_host=${yandex_compute_instance.opensearch.network_interface[0].ip_address} ansible_user=debian
+
+[prometheus_host]
+# Прописываем приватный IP-адрес сервера Prometheus для сбора метрик
+prometheus_server ansible_host=${yandex_compute_instance.prometheus.network_interface[0].ip_address} ansible_user=debian
+
+[public_mgmt]
+# Назначаем Бастион как хост, на котором также будут работать интерфейсы Grafana и Kibana
+grafana_kibana_server ansible_host=${yandex_compute_instance.bastion.network_interface[0].nat_ip_address} ansible_user=debian
+EOF
+EOT
+  }
+
+  # Шаг Б: Даем облаку 15 секунд прогреть SSH-порты серверов и запускаем автоустановку конфигурации
+  provisioner "local-exec" {
+    # Задержка (sleep), отключение проверки SSH Fingerprints в целях автоматизации и запуск оркестратора через bash
+    command = "sleep 15 && export ANSIBLE_HOST_KEY_CHECKING=False && bash run_ansible.sh"
   }
 }
+
+
 ```
 
-📄 6. alb.tf (L7-Балансировщик)
+📄 6. alb.tf (L7-Балансировщик) и ПЛАНЫ РЕЗЕРВНОГО КОПИРОВАНИЯ
 Этот файл настраивает Application Load Balancer. Он объединяет веб-серверы в целевую группу, следит за их работоспособностью (healthcheck) и распределяет входящий HTTP-трафик.
 
 ```text
+# --- БАЛАНСИРОВЩИК ТРАФИКА (ALB) ---
+
+# Создание целевой группы (Target Group), объединяющей бэкенд-серверы для распределения трафика
 resource "yandex_alb_target_group" "web_tg" {
-  name = "web-target-group"                         # Создаем целевую группу, куда войдут наши веб-ноды
-
+  # Системное имя целевой группы в консоли Yandex Cloud
+  name = "site-target-group"
+  
+  # Добавление в группу первого веб-сервера (бэкенда)
   target {
-    subnet_id  = yandex_vpc_subnet.private_a.id      # Указываем подсеть первого веб-сервера
-    ip_address = yandex_compute_instance.web1.network_interface.0.ip_address # Внутренний IP web-server-1
+    # Идентификатор приватной подсети зоны А, где живет сервер
+    subnet_id  = yandex_vpc_subnet.private_a.id
+    # Динамическая подстановка локального IP-адреса первого веб-сервера
+    ip_address = yandex_compute_instance.web_1.network_interface[0].ip_address
   }
-
+  
+  # Добавление в группу второго веб-сервера для обеспечения отказоустойчивости
   target {
-    subnet_id  = yandex_vpc_subnet.private_b.id      # Указываем подсеть второго веб-сервера (зона B)
-    ip_address = yandex_compute_instance.web2.network_interface.0.ip_address # Внутренний IP web-server-2
+    # Идентификатор приватной подсети зоны Б, где локализован резервный сервер
+    subnet_id  = yandex_vpc_subnet.private_b.id
+    # Динамическая подстановка локального IP-адреса второго веб-сервера
+    ip_address = yandex_compute_instance.web_2.network_interface[0].ip_address
   }
 }
 
+# Создание группы бэкендов (Backend Group), которая задает правила обработки HTTP-запросов
 resource "yandex_alb_backend_group" "web_bg" {
-  name = "web-backend-group"                        # Группа бэкендов, управляющая логикой распределения
-
+  # Системное имя группы бэкендов в каталоге
+  name = "site-backend-group"
+  
+  # Настройка бэкенда для работы с веб-сайтом по протоколу HTTP
   http_backend {
-    name             = "http-backend"                # Название HTTP-бэкенда
-    weight           = 1                             # Вес ноды (равный распределяет трафик 50/50)
-    target_group_ids = [yandex_alb_target_group.web_tg.id] # Привязываем созданную целевую группу
-    port             = 80                            # На какой порт слать трафик (Nginx слушает 80)
-
+    # Внутреннее имя HTTP-бэкенда в рамках данной конфигурации
+    name             = "http-backend"
+    # Вес бэкенда при балансировке (1 означает равное распределение трафика 50/50 между узлами)
+    weight           = 1
+    # Порт, на котором веб-серверы (Nginx) внутри ВМ принимают трафик от балансировщика
+    port             = 80
+    # Привязка ранее созданной целевой группы с нашими серверами web_1 и web_2
+    target_group_ids = [yandex_alb_target_group.web_tg.id]
+    
+    # Настройки поведения балансировщика при авариях
+    load_balancing_config {
+      # Порог паники в %: если живых серверов останется меньше 50%, балансировщик начнет слать трафик на ВСЕ узлы, игнорируя упавшие проверки здоровья (защита от перегрузки живого узла)
+      panic_threshold = 50
+    }    
+    
+    # Настройка автоматической проверки работоспособности серверов (Health Check)
     healthcheck {
-      timeout          = "2s"                        # Время ожидания ответа от сервера (2 секунды)
-      interval         = "5s"                        # Интервал между проверками доступности (5 секунд)
-      healthy_threshold   = 2                        # Нужно 2 успешных ответа, чтобы считать ноду живой
-      unhealthy_threshold = 3                        # После 3 ошибок нода вылетает из балансировки
+      # Время ожидания ответа от сервера, превышение которого считается сбоем (1 секунда)
+      timeout             = "1s"
+      # Интервал между регулярными проверками состояния серверов (каждые 3 секунды)
+      interval            = "3s"
+      # Количество успешных проверок подряд, после которых упавший сервер признается здоровым (Healthy)
+      healthy_threshold   = 2
+      # Количество провальных проверок подряд, после которых живой сервер признается упавшим (Unhealthy)
+      unhealthy_threshold = 2
+      
+      # Параметры HTTP-запроса для проверки жизнедеятельности
       http_healthcheck {
-        path = "/"                                  # Запрашиваем корень сайта для проверки его работы
+        # Балансировщик будет запрашивать корень сайта (главную страницу)
+        path = "/"
       }
     }
   }
 }
 
+# Создание HTTP-роутера для маршрутизации входящих веб-запросов
 resource "yandex_alb_http_router" "web_router" {
-  name = "web-http-router"                           # HTTP-роутер для маршрутизации трафика
+  # Системное название HTTP-роутера в консоли облака
+  name = "site-http-router"
 }
 
-resource "yandex_alb_virtual_host" "web_vh" {
-  name           = "web-virtual-host"               # Виртуальный хост внутри роутера
-  http_router_id = yandex_alb_http_router.web_router.id # Привязка к нашему роутеру
-
+# Настройка виртуального хоста (Virtual Host) внутри созданного HTTP-роутера
+resource "yandex_alb_virtual_host" "web_vhost" {
+  # Системное имя виртуального хоста
+  name           = "site-virtual-host"
+  # Связывание хоста с вышеописанным роутером трафика
+  http_router_id = yandex_alb_http_router.web_router.id
+  
+  # Описание правил маршрутизации (маршрутов) для запросов
   route {
-    name = "root-route"                             # Правило для обработки всех входящих путей
+    # Имя конкретного правила (обработка корневого пути сайта)
+    name = "root-path-route"
+    
+    # Определение HTTP-маршрута
     http_route {
+      # Действие, которое нужно выполнить при совпадении маршрута
       http_route_action {
-        backend_group_id = yandex_alb_backend_group.web_bg.id # Перенаправляем весь трафик на группу бэкендов
+        # Перенаправить пришедший запрос на группу бэкендов, которая распределит его между web_1 и web_2
+        backend_group_id = yandex_alb_backend_group.web_bg.id
+        # Максимальное время ожидания ответа бэкенда пользователем (таймаут 60 секунд)
+        timeout          = "60s"
       }
     }
   }
 }
 
-resource "yandex_alb_load_balancer" "web_balancer" {
-  name               = "web-load-balancer"          # Сам L7-балансировщик Яндекса
-  network_id         = yandex_vpc_network.default.id # Привязываем к глобальной сети проекта
-  security_group_ids = [yandex_vpc_security_group.public_sg.id] # Подключаем публичный файрвол
-
+# Создание самого L7-балансировщика (Application Load Balancer) в Yandex Cloud
+resource "yandex_alb_load_balancer" "web_alb" {
+  # Системное имя балансировщика, отображаемое в веб-интерфейсе
+  name               = "site-application-load-balancer"
+  # Привязка балансировщика к нашей общей виртуальной сети VPC
+  network_id         = yandex_vpc_network.main_vpc.id
+  # Назначение группы безопасности, открывающей порт 80 для внешнего мира
+  security_group_ids = [yandex_vpc_security_group.alb_sg.id]
+  
+  # Политика размещения балансировщика в инфраструктуре (отказоустойчивость самого ALB)
   allocation_policy {
+    # Резервирование узла балансировщика в зоне А
     location {
-      zone_id   = "ru-central1-a"                   # Размещаем балансировщик в зоне A
-      subnet_id = yandex_vpc_subnet.public_a.id      # ...и подключаем к публичной подсети
+      zone_id   = "ru-central1-a"
+      # Размещение в публичной подсети зоны А
+      subnet_id = yandex_vpc_subnet.public_a.id
+    }
+    # Резервирование узла балансировщика в зоне Б (для защиты от падения дата-центра)
+    location {
+      zone_id   = "ru-central1-b"
+      # Размещение в публичной подсети зоны Б
+      subnet_id = yandex_vpc_subnet.public_b.id
     }
   }
-
+  
+  # Настройка слушателя (Listener), принимающего входящие соединения из интернета
   listener {
-    name = "http-listener"                          # Слушатель входящих запросов из интернета
+    # Уникальное имя слушателя внутри балансировщика
+    name = "http-listener"
+    
+    # Конечная точка подключения
     endpoint {
+      # Блок адресации
       address {
-        external_ipv4_address {}                    # Выделяем внешний публичный IP-адрес для сайта
+        # Использование зарезервированного ранее внешнего статического IP-адреса балансировщика
+        external_ipv4_address {
+          address = yandex_vpc_address.alb_address.external_ipv4_address[0].address
+        }
       }
-      ports = [80]                                  # Слушаем стандартный 80-й порт HTTP
+      # Входящие сетевые порты, которые слушает балансировщик (стандартный HTTP веб-порт)
+      ports = [80]
     }
+    
+    # Обработчик (Handler), отвечающий за передачу трафика со слушателя в роутер
     http {
       handler {
-        http_router_id = yandex_alb_http_router.web_router.id # Связываем слушатель с роутером
+        # Передавать весь входящий HTTP-трафик на созданный ранее http_router
+        http_router_id = yandex_alb_http_router.web_router.id
       }
     }
   }
 }
-```
 
-📄 7. outputs.tf (Выходные переменные)Этот файл заставляет Terraform выводить критически важные IP-адреса в терминал сразу после успешного завершения развертывания.
+# --- ПЛАНЫ РЕЗЕРВНОГО КОПИРОВАНИЯ (БЭКАПЫ) ---
+
+# Создание расписания для автоматического создания снимков дисков инфраструктуры
+resource "yandex_compute_snapshot_schedule" "daily_backup" {
+  # Системное имя плана резервного копирования в Yandex Cloud
+  name = "infrastructure-daily-backup-plan"
+  
+  # Описание политики запуска бэкапов
+  schedule_policy {
+    # Формат CRON: запускать резервное копирование каждую ночь ровно в 02:00 по времени UTC
+    expression = "0 2 * * *"
+  }
+  
+  # Срок хранения резервных копий: 168 часов (7 дней), старые снимки удаляются автоматически для экономии средств
+  retention_period = "168h"
+  
+  # Метаданные описания снимков
+  snapshot_spec {
+    description = "Daily automatic backup snapshot"
+  }
+  
+  # Массив идентификаторов дисков виртуальных машин, которые включены в план резервного копирования
+  disk_ids = [
+    # Загрузочный диск Бастион-хоста (сервера прыжка и управления)
+    yandex_compute_instance.bastion.boot_disk[0].disk_id,
+    # Загрузочный диск первого основного веб-сервера
+    yandex_compute_instance.web_1.boot_disk[0].disk_id,
+    # Загрузочный диск второго резервного веб-сервера
+    yandex_compute_instance.web_2.boot_disk[0].disk_id,
+    # Загрузочный диск сервера мониторинга Prometheus + Grafana
+    yandex_compute_instance.prometheus.boot_disk[0].disk_id,
+    # Загрузочный диск сервера централизованного хранения логов Elasticsearch (OpenSearch)
+    yandex_compute_instance.opensearch.boot_disk[0].disk_id,
+  ]
+}
+
+# --- ВЫВОД IP АДРЕСОВ В ТЕРМИНАЛ (ОУТПУТЫ) ---
+# Блоки вывода критически важных IP-адресов в терминал сразу после завершения команды terraform apply
+
+# Вывод публичного IP-адреса Бастион-хоста для SSH-подключения администратора
+output "IP_BASTION_HOST_PUBLIC" {
+  value = yandex_compute_instance.bastion.network_interface[0].nat_ip_address
+}
+
+# Вывод внешнего IP-адреса балансировщика (это публичный адрес вашего сайта для проверки в браузере)
+output "IP_BALANCER_SITE_PUBLIC" {
+  value = yandex_vpc_address.alb_address.external_ipv4_address[0].address
+}
+
+# Вывод публичного IP-адреса для доступа к веб-панелям Grafana и Kibana (работает через проброс портов Бастиона)
+output "IP_GRAFANA_AND_LOGS_PUBLIC" {
+  value = yandex_compute_instance.bastion.network_interface[0].nat_ip_address
+}
+
+# Вывод внутреннего (локального) IP-адреса первого веб-сервера внутри VPC
+output "IP_INTERNAL_WEB_SERVER_1" {
+  value = yandex_compute_instance.web_1.network_interface[0].ip_address
+}
+
+# Вывод внутреннего (локального) IP-адреса второго веб-сервера внутри VPC
+output "IP_INTERNAL_WEB_SERVER_2" {
+  value = yandex_compute_instance.web_2.network_interface[0].ip_address
+}
+
+# Вывод локального IP-адреса сервера мониторинга Prometheus для внутренней связи хостов
+output "IP_INTERNAL_PROMETHEUS" {
+  value = yandex_compute_instance.prometheus.network_interface[0].ip_address
+}
+
+# Вывод локального IP-адреса сервера хранения логов Elasticsearch для настройки агентов Vector/Filebeat
+output "IP_INTERNAL_OPENSEARCH_STORAGE" {
+  value = yandex_compute_instance.opensearch.network_interface[0].ip_address
+}
+
+
+```
+📄 7. variables.tf файл переменных
 
 ```text
-output "balancer_public_ip" {
-  value       = yandex_alb_load_balancer.web_balancer.listener[0].endpoint[0].address[0].external_ipv4_address[0].address
-  description = "Публичный IP-адрес балансировщика (адрес сайта)" # Сюда мы заходим браузером
+# --- ИДЕНТИФИКАТОРЫ ОКРУЖЕНИЯ (Значения автоматически подставятся из файла terraform.tfvars) ---
+
+# Объявление переменной для хранения идентификатора облака
+variable "yc_cloud_id" {
+  # Строковый тип данных (состоит из букв, цифр и дефисов)
+  type        = string
+  # Текстовое описание переменной, поясняющее её назначение в проекте
+  description = "Идентификатор облака Yandex Cloud"
 }
 
-output "bastion_public_ip" {
-  value       = yandex_compute_instance.bastion.network_interface.0.nat_ip_address
-  description = "Публичный IP-адрес Бастион-хоста для управления" # Нужен для SSH и Grafana/Kibana
+# Объявление переменной для конкретного рабочего каталога
+variable "yc_folder_id" {
+  # Строковый тип данных для хранения ID каталога Яндекса
+  type        = string
+  # Пояснение: каталог — это изолированная папка внутри облака, где создаются ресурсы
+  description = "Идентификатор каталога (Folder) внутри облака"
 }
 
-output "web_servers_private_ips" {
-  value       = [yandex_compute_instance.web1.network_interface.0.ip_address, yandex_compute_instance.web2.network_interface.0.ip_address]
-  description = "Приватные IP-адреса веб-серверов"
+# --- СЕТЕВЫЕ ПАРАМЕТРЫ И ЗОНЫ ДОСТУПНОСТИ ---
+
+# Объявление переменной для основной физической зоны доступности
+variable "yc_zone_default" {
+  # Строковый тип данных
+  type        = string
+  # Значение по умолчанию: дата-центр Яндекса в зоне А (Владимир)
+  default     = "ru-central1-a"
+  # Описание назначения: сюда ставится бастион, первый веб-сервер, логи и мониторинг
+  description = "Основная зона доступности (дата-центр А) для инфраструктуры"
 }
+
+# Объявление переменной для резервной зоны доступности
+variable "yc_zone_backup" {
+  # Строковый тип данных
+  type        = string
+  # Значение по умолчанию: дата-центр Яндекса в зоне Б (Сколково)
+  default     = "ru-central1-b"
+  # Описание назначения: критически важный параметр для отказоустойчивости (сюда ставится web_2)
+  description = "Резервная зона доступности (дата-центр Б) для обеспечения отказоустойчивости сайта"
+}
+
+# --- ПАРАМЕТРЫ ОПЕРАЦИОННОЙ СИСТЕМЫ И ЖЕЛЕЗА ВМ ---
+
+# Объявление переменной для семейства операционной системы
+variable "vm_ubuntu_family" {
+  # Строковый тип данных (имя переменной осталось историческим, но значение адаптировано)
+  type        = string
+  # Значение по умолчанию: стабильный релиз Debian 13
+  default     = "debian-13" # Жестко фиксируем использование Debian 13 (Trixie)
+  # Описание назначения: по этой строке блок data ищет свежий образ ОС в маркетплейсе
+  description = "Семейство операционной системы для поиска последнего актуального образа в зеркале"
+}
+
+# Объявление переменной для поколения процессоров
+variable "vm_platform_id" {
+  # Строковый тип данных
+  type        = string
+  # Платформа третьего поколения: Intel Ice Lake (standard-v3)
+  default     = "standard-v3"
+  # Описание назначения: указывает тип процессоров, на которых будут запускаться серверы
+  description = "Тип архитектуры процессора виртуальных машин (Intel Ice Lake)"
+}
+
+# Объявление переменной для уровня производительности процессора
+variable "vm_core_fraction" {
+  # Числовой тип данных (целое число процентов)
+  type        = number
+  # Значение по умолчанию: 20% гарантированной мощности ядра
+  default     = 20
+  # Описание назначения: ключевой параметр для жесткой экономии ресурсов и бюджета курсовой работы
+  description = "Гарантированная доля CPU в % для прерываемых ВМ (снижает стоимость хостинга на 70%)"
+}
+
+# Объявление переменной для количества виртуальных ядер
+variable "vm_cores" {
+  # Числовой тип данных
+  type        = number
+  # Значение по умолчанию: 2 ядра vCPU
+  default     = 2
+  # Описание: базовый стандарт вычислительной мощности для стабильной работы Linux-сервисов
+  description = "Количество ядер процессора, выделяемых на каждую виртуальную машину"
+}
+
+# Объявление переменной для стандартного объема оперативной памяти
+variable "vm_memory_default" {
+  # Числовой тип данных (целое число Гигабайт)
+  type        = number
+  # Значение по умолчанию: 2 ГБ оперативной памяти
+  default     = 2
+  # Описание: этого объема достаточно для стабильной работы легковесных служб (Nginx, Prometheus-агенты, SSH-туннели)
+  description = "Объем оперативной памяти в ГБ для стандартных серверов (Бастион, Web-ноды, Prometheus)"
+}
+
+# Объявление переменной для увеличенного объема оперативной памяти
+variable "vm_memory_large" {
+  # Числовой тип данных (целое число Гигабайт)
+  type        = number
+  # Значение по умолчанию: 4 ГБ оперативной памяти
+  default     = 4
+  # Описание: выделяется под хранилище логов, так как Java-процессы Elasticsearch/OpenSearch требуют больше RAM для кэширования текстовых индексов
+  description = "Объем оперативной памяти в ГБ для тяжелых систем (OpenSearch СУБД логов и Grafana)"
+}
+
+# --- ХРАНИЛИЩЕ И КЛЮЧИ ДОСТУПА ---
+
+# Объявление переменной для выбора типа дисковых накопителей в облаке
+variable "disk_type" {
+  # Строковый тип данных (техническое название диска в API Яндекса)
+  type        = string
+  # Значение по умолчанию: обычный сетевой жесткий диск (network-hdd)
+  default     = "network-hdd"
+  # Описание: критически важный выбор для соблюдения «инструкции по экономии ресурсов» курсовой работы (HDD стоит в разы дешевле, чем SSD)
+  description = "Тип сетевого диска (используем экономичный HDD вместо SSD)"
+}
+
+# Объявление переменной для хранения пути к SSH-ключу
+variable "ssh_public_key_path" {
+  # Строковый тип данных (путь к файлу в файловой системе)
+  type        = string
+  # Значение по умолчанию: стандартный путь к публичному ключу в домашней директории Linux
+  default     = "~/.ssh/id_rsa.pub"
+  # Описание: ключ автоматически пробрасывается на все ВМ, позволяя безопасно управлять приватными серверами через Бастион в режиме ProxyJump
+  description = "Путь к  публичному SSH-ключу на локальном ПК для организации ProxyJump сквозь Бастион"
+}
+
+
+
+
+
+
+## 📄 8 Файл `terraform/terraform.tfvars`
+
+```text
+# Передача уникального идентификатора вашего персонального облака Yandex Cloud в переменную var.yc_cloud_id
+yc_cloud_id  = "b1go8ub4737sv21nngap"
+
+# Передача уникального идентификатора конкретного рабочего каталога (папки) облака в переменную var.yc_folder_id
+yc_folder_id = "b1gm00agl8bt1c2vab85"
+
+# Добавьте эту строку
+# Явное указание абсолютного пути к вашему локальному публичному SSH-ключу для передачи в переменную var.ssh_public_key_path
+ssh_public_key_path = "/home/user/.ssh/id_rsa.pub"
 ```
+ 
 
-📄 8. run_ansible.sh (Скрипт автозапуска из Terraform)
+
+
+
+📄 9. run_ansible.sh (Скрипт автозапуска из Terraform)
 Этот локальный bash-скрипт вызывается ресурсом null_resource внутри vms.tf. Он координирует автоматический накат всех конфигураций.
 
 ```text
-#!/bin/bash
-# Выключаем строгую проверку SSH хост-ключей, чтобы Ansible не зависал на вопросах "Are you sure you want to continue connecting?"
-export ANSIBLE_HOST_KEY_CHECKING=False
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "Ожидание 15 секунд для окончательного старта SSH-демонов на виртуалках..."
-sleep 15                                            # Задержка, чтобы ОС успели полностью загрузиться
+# Переход в папку ansible (относительно места запуска скрипта)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
 
-cd ../ansible                                       # Переходим в директорию со сценариями Ansible
+# Если ключ передан через переменную окружения — используем его
+ANSIBLE_KEY="${ANSIBLE_PRIVATE_KEY:-}"
+ANSIBLE_EXTRA_ARGS=""
+if [[ -n "$ANSIBLE_KEY" && -f "$ANSIBLE_KEY" ]]; then
+  ANSIBLE_EXTRA_ARGS="-k --private-key=$ANSIBLE_KEY"
+fi
 
-echo "Запуск базовой настройки веб-серверов (Nginx + PHP)..."
-ansible-playbook -i hosts.ini playbook.yml          # Разворачиваем веб-сайт на нодах
+echo "=== [1/5] Запуск развёртывания именного сайта Bobkov A.K. ==="
+ansible-playbook -i hosts.ini playbook.yml $ANSIBLE_EXTRA_ARGS
 
-echo "Установка агентов мониторинга Node Exporter..."
-ansible-playbook -i hosts.ini update_web.yml        # Накатываем сборщики метрик железа
+echo "=== [2/5] Запуск централизованного стека логов ELK ==="
+ansible-playbook -i hosts.ini playbook_logging.yml $ANSIBLE_EXTRA_ARGS
 
-echo "Развертывание системы логирования (Elasticsearch + Kibana + Filebeat)..."
-ansible-playbook -i hosts.ini playbook_logging.yml  # Поднимаем контейнеры логов и настраиваем агенты
+echo "=== [3/5] Установка модуля метрик stub_status и экспортеров ==="
+ansible-playbook -i hosts.ini update_web.yml $ANSIBLE_EXTRA_ARGS
 
-echo "Инфраструктурный стенд полностью развернут и настроен!"
+echo "=== [4/5] Запуск и настройка мониторинга Prometheus ==="
+ansible-playbook -i hosts.ini deploy_prometheus.yml $ANSIBLE_EXTRA_ARGS
+
+echo "=== [5/5] Развёртывание визуализации Grafana Enterprise ==="
+ansible-playbook -i hosts.ini deploy_grafana.yml $ANSIBLE_EXTRA_ARGS
+
+echo "=== ВСЕ СЕРВИСЫ УСПЕШНО ЗАПУЩЕНЫ АВТОМАТОМ! ==="
+
 ```
 
 
@@ -606,22 +1197,50 @@ echo "=== Все конфигурации успешно обновлены! ===
 Этот файл генерируется автоматически через Terraform (vms.tf). Он делит серверы на группы и прописывает параметры ProxyJump для безопасного подключения в приватный контур через Бастион.
 
 ```text
+# Группа бастион-хоста: единственный публичный вход в приватную сеть
 [bastion]
-# Описываем хост управления. Доступен напрямую по публичному IP
-bastion-host ansible_host=93.77.185.215 ansible_user=user
+bastion_host ansible_host=93.77.185.215 ansible_user=debian
 
-[web]
-# Веб-серверы находятся в приватной сети. Подключаемся к ним через Бастион (ProxyJump)
-web-server-1 ansible_host=10.0.10.24 ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@93.77.185.215'
-web-server-2 ansible_host=10.0.20.11 ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@93.77.185.215'
+# Веб-серверы в приватных подсетях: доступ только через бастион
+[webservers]
+web1 ansible_host=10.0.10.24 ansible_user=debian
+web2 ansible_host=10.0.20.11 ansible_user=debian
 
-[monitoring]
-# Сервер сбора метрик Prometheus. Также изолирован в приватной подсети
-prometheus-server ansible_host=10.0.10.25 ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@93.77.185.215'
+# Сервер для хранения логов (OpenSearch/Elasticsearch)
+[logging_storage]
+elasticsearch_server ansible_host=10.0.10.11 ansible_user=debian
 
-[logging]
-# Хранилище логов Elasticsearch. Доступ только через SSH-туннель Бастиона
-elasticsearch-storage ansible_host=10.0.10.11 ansible_user=user ansible_ssh_common_args='-o ProxyJump=user@93.77.185.215'
+# Prometheus: сбор метрик
+[prometheus_host]
+prometheus_server ansible_host=10.0.10.25 ansible_user=debian
+
+# Публичные сервисы управления (Grafana, Kibana) — тот же IP, что и у бастиона
+[public_mgmt]
+grafana_kibana_server ansible_host=93.77.185.215 ansible_user=debian
+
+# Глобальные переменные для всех хостов
+[all:vars]
+ansible_user=debian
+# Путь к приватному SSH-ключу, соответствующему публичному в Terraform
+ansible_ssh_private_key_file=/home/user/.ssh/id_rsa
+
+# ProxyJump: подключаемся к приватным хостам ЧЕРЕЗ бастион.
+# Важно: не применяем к самому бастиону, иначе будет цикл.
+[webservers:vars]
+ansible_ssh_common_args="-o StrictHostKeyChecking=no -o ProxyJump=debian@93.77.185.215"
+
+[logging_storage:vars]
+ansible_ssh_common_args="-o StrictHostKeyChecking=no -o ProxyJump=debian@93.77.185.215"
+
+[prometheus_host:vars]
+ansible_ssh_common_args="-o StrictHostKeyChecking=no -o ProxyJump=debian@93.77.185.215"
+
+# Бастион и публичные хосты: прямой SSH без ProxyJump
+[bastion:vars]
+ansible_ssh_common_args="-o StrictHostKeyChecking=no"
+
+[public_mgmt:vars]
+ansible_ssh_common_args="-o StrictHostKeyChecking=no"
 ```
 
 
