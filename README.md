@@ -296,7 +296,7 @@ kursovoi_proekt/enterprise_variant/
 ```
 
 > **📸 Схема взаимодействия:**
-![Схема взаимодействия](./enterprize_variant/img/1.png)
+![Схема взаимодействия](./enterprise_variant/img/1.png)
 
 
 
