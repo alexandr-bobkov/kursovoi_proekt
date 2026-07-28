@@ -266,6 +266,7 @@ Cоздайте ВМ, разверните на ней Elasticsearch. Устан
 
 ## 1. Структура каталогов проекта
 
+```text
 kursovoi_proekt/enterprise_variant/
 ├── ansible/                          # Директория со сценариями конфигурации Ansible
 │   ├── vars/                         # (Опционально) Переменные автоматизации
@@ -292,6 +293,7 @@ kursovoi_proekt/enterprise_variant/
     ├── terraform.tfstate.backup      # Резервная копия предыдущего состояния облачной инфраструктуры
     ├── variables.tf                  # Декларация входных переменных (folder_id, зоны, ID образов)
     └── vms.tf                        # Описание Бастиона, Prometheus, ES и масштабируемой Instance Group
+```
 
 > **📸 Схема взаимодействия:**
 ![Схема взаимодействия](./enterprize_variant/img/1.png)
