@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# CHAST 1: ZAPUSK CONTEINERA ELASTICSEARCH STORAGE БЕЗ БЛОКИРОВОК
+# CHAST 1: ZAPUSK CONTEINERA ELASTICSEARCH STORAGE bez blokirovok
 # ==============================================================================
 - name: Deploy Elasticsearch Container
   hosts: logging_storage
@@ -62,7 +62,7 @@
       shell: "docker-compose -f /opt/elastic-stack/docker-compose.yml down && docker-compose -f /opt/elastic-stack/docker-compose.yml up -d"
 
 # ==============================================================================
-# CHAST 2: AUTOMATIC ZAPUSK CONTEINERA KIBANA БЕЗ АВТОРИЗАЦИИ
+# CHAST 2: AUTOMATIC ZAPUSK CONTEINERA KIBANA bez avtorizacii
 # ==============================================================================
 - name: Deploy Kibana Container directly to Bastion Node
   hosts: bastion
@@ -118,7 +118,7 @@
       shell: "docker-compose -f /opt/kibana-stack/docker-compose.yml down && docker-compose -f /opt/kibana-stack/docker-compose.yml up -d"
 
 # ==============================================================================
-# CHAST 3: RECURSIVE USTANOVKA FILEBEAT БЕЗ АВТОРИЗАЦИИ В БАЗУ
+# CHAST 3: RECURSIVE USTANOVKA FILEBEAT bez avtorizacii v bazy
 # ==============================================================================
 - name: Deploy Native Filebeat Service on Web Servers
   hosts: webservers

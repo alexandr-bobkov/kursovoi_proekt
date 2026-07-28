@@ -1,6 +1,6 @@
 variable "yandex_folder_id" {
   type        = string
-  default     = "b1gfnin5k6cbrnbsamn0" # FIXED: Teper propisano zhelezno, sprosit bolshe ne dolzhen!
+  default     = "b1gfnin5k6cbrnbsamn0" 
   description = "ID kataloga default v Yandex Cloud"
 }
 

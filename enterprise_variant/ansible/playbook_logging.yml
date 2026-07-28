@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# ЧАСТЬ 1: РАЗВЕРТЫВАНИЕ И НАСТРОЙКА ELASTICSEARCH С АВТОРИЗАЦИЕЙ
+# РАЗВЕРТЫВАНИЕ И НАСТРОЙКА ELASTICSEARCH С АВТОРИЗАЦИЕЙ
 # ==============================================================================
 - name: Deploy and Configure Elasticsearch Container
   hosts: logging_storage
@@ -65,7 +65,7 @@
       shell: "docker-compose -f {{ elastic_work_dir }}/docker-compose.yml down && docker-compose -f {{ elastic_work_dir }}/docker-compose.yml up -d"
 
 # ==============================================================================
-# ЧАСТЬ 2: ТВОЯ РАБОЧАЯ УСТАНОВКА FILEBEAT С ЗЕРКАЛА ЯНДЕКСА
+# ЧАСТЬ 2: УСТАНОВКА FILEBEAT С ЗЕРКАЛА ЯНДЕКСА
 # ==============================================================================
 - name: Deploy Native Filebeat Service on Web Servers
   hosts: webservers

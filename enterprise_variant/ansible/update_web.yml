@@ -3,7 +3,7 @@
   hosts: webservers
   become: yes
   tasks:
-    - name: Proverka Р°РєС‚РёРІРЅРѕСЃС‚Рё Рё Р·Р°РїСѓСЃРє СЃРёСЃС‚РµРјРЅРѕРіРѕ РґРµРјРѕРЅР° PHP8.4-FPM
+    - name: Proverka aktivnosti i zapusk sistemnogo demona PHP8.4-FPM
       systemd:
         name: php8.4-fpm
         state: started

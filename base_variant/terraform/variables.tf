@@ -67,11 +67,11 @@ variable "vm_memory_large" {
 variable "disk_type" {
   type        = string
   default     = "network-hdd"
-  description = "Тип сетевого диска (используем экономичный HDD вместо SSD)"
+  description = "Тип сетевого диска ( HDD вместо SSD)"
 }
 
 variable "ssh_public_key_path" {
   type        = string
   default     = "~/.ssh/id_rsa.pub"
-  description = "Путь к вашему публичному SSH-ключу на локальном ПК для организации ProxyJump сквозь Бастион"
+  description = "Путь к  публичному SSH-ключу на локальном ПК для организации ProxyJump сквозь Бастион"
 }

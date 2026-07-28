@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# COMPLETELY AUTOMATED WEBSITE DEPLOYMENT WITH STUDENT DATA AND HARDWARE INFOS
+# AUTOMATED WEBSITE DEPLOYMENT 
 # ==============================================================================
 - name: Deploy Dynamic PHP Website with Hardware Stats on Debian 13
   hosts: webservers
@@ -16,7 +16,7 @@
       shell: "ls /run/php/php*-fpm.sock | head -n 1"
       register: php_socket_path
 
-    - name: Zapiss idealnogo konfiga Nginx default s podderzhkoi PHP
+    - name: Zapiss  konfiga Nginx default s podderzhkoi PHP
       copy:
         dest: /etc/nginx/sites-available/default
         content: |
@@ -105,4 +105,4 @@
         name: "{{ item }}"
         state: restarted
         enabled: yes
-      loop: [nginx, php8.4-fpm] # ИСПРАВЛЕНО: Задано точное имя службы для Debian 13
+      loop: [nginx, php8.4-fpm] # Задано точное имя службы для Debian 13 с этим были проблемы

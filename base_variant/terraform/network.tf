@@ -150,7 +150,7 @@ resource "yandex_vpc_security_group" "bastion_sg" {
     port           = 22
   }
 
-  # Открываем порт 5601 для Kibana внутри ресурса
+  # Открываю порт 5601 для Kibana внутри ресурса
   ingress {
     protocol       = "TCP"
     description    = "Allow Kibana UI for online-commission"
@@ -158,7 +158,7 @@ resource "yandex_vpc_security_group" "bastion_sg" {
     port           = 5601
   }
 
-  # Открываем порт 3000 для Grafana внутри ресурса
+  # Открываю порт 3000 для Grafana внутри ресурса
   ingress {
     protocol       = "TCP"
     description    = "Allow Grafana UI for online-commission"

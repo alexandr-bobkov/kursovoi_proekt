@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# DEPLOY PROMETHEUS MONITORING SERVER
+# PROMETHEUS MONITORING SERVER
 # ==============================================================================
 - name: Deploy and configure Prometheus Server on Debian 13
   hosts: prometheus_host
