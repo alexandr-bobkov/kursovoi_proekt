@@ -294,7 +294,7 @@ Cоздайте ВМ, разверните на ней Elasticsearch. Устан
 </details>
 
 <details>
-<summary>Расширенная  часть (base enterprize)</summary>
+<summary>Расширенная  часть (enterprize вариант)</summary>
 
 
 ### Структура каталогов проекта
