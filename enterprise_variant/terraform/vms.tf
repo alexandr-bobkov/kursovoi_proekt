@@ -206,7 +206,7 @@ EOF
 EOT
   }
 
-  # УМНЫЙ RUNNER: ЖДЕТ РЕАЛЬНОГО СТАРТА SSH НА БАСТИОНЕ И ЗАПУСКАЕТ ANSIBLE
+      # УМНЫЙ RUNNER: ЖДЕТ РЕАЛЬНОГО СТАРТА SSH НА БАСТИОНЕ И ЗАПУСКАЕТ ANSIBLE БЕЗ ПРОВЕРОК
   provisioner "local-exec" {
     command = <<EOT
 echo "Ozhidaem poyavleniya SSH na Bastione..."
@@ -215,9 +215,20 @@ until nc -z -w 3 ${yandex_compute_instance.bastion.network_interface.0.nat_ip_ad
   sleep 5
 done
 echo "SSH na Bastione uspeshno podnyalsya! Zapuskaem deploy..."
+
+# Принудительно очищаем старый отпечаток для этого конкретного IP-адреса из known_hosts на лету
+ssh-keygen -f "~/.ssh/known_hosts" -R "${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}" || true
+
+# Отключаем проверку ключей хоста на уровне окружения Ansible
 export ANSIBLE_HOST_KEY_CHECKING=False
+
+# Дополнительно передаем флаги игнорирования ключей при вызове скрипта (если внутри используются нативные команды ssh)
+export SSH_ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
 bash run_ansible.sh
 EOT
   }
 }
+
+
 
