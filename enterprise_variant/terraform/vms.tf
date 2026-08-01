@@ -30,6 +30,7 @@ resource "yandex_compute_instance" "bastion" {
   resources {
     cores  = 2
     memory = 2
+    
   }
   boot_disk {
     initialize_params {
@@ -56,6 +57,7 @@ resource "yandex_compute_instance" "prometheus" {
   resources {
     cores  = 2
     memory = 2
+    
   }
   boot_disk {
     initialize_params {
@@ -81,6 +83,7 @@ resource "yandex_compute_instance" "opensearch" {
   resources {
     cores  = 2
     memory = 4
+    
   }
   boot_disk {
     initialize_params {
@@ -108,6 +111,7 @@ resource "yandex_compute_instance_group" "web_group" {
     resources {
       cores  = 2
       memory = 2
+      
     }
     boot_disk {
       mode = "READ_WRITE"

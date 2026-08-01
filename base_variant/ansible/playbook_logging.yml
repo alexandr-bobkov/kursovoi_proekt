@@ -1,178 +1,173 @@
 ---
-# ==============================================================================
-# CHAST 1: ZAPUSK CONTEINERA ELASTICSEARCH STORAGE bez blokirovok
-# ==============================================================================
-- name: Deploy Elasticsearch Container
-  hosts: logging_storage
+- name: Развертывание и настройка Elastic Stack 8.11.3 (Бобков А.К.)
+  hosts: logging_storage, kibana_host
   become: yes
+
   vars:
-    host_gcr: "mirror.gcr.io"
-    folder_elastic: "/elasticsearch"
-    tag_elastic: ":8.11.3"
-    elastic_image_full: "{{ [host_gcr, folder_elastic, tag_elastic] | join('') }}"
+    elastic_jvm_min: "-Xms1g"
+    elastic_jvm_max: "-Xmx1g"
+
+    el_proto: "https://"
+    el_mirror: "mirror.yandex.ru"
+    es_folder: "/mirrors/elastic/8/pool/main/e/elasticsearch/"
+    kb_folder: "/mirrors/elastic/8/pool/main/k/kibana/"
+    deb_es_file: "elasticsearch-8.11.3-amd64.deb"
+    deb_kb_file: "kibana-8.11.3-amd64.deb"
+
+    url_elastic_8113: "{{ [el_proto, el_mirror, es_folder, deb_es_file] | join('') }}"
+    url_kibana_8113: "{{ [el_proto, el_mirror, kb_folder, deb_kb_file] | join('') }}"
+
   tasks:
-    - name: Install system dependencies for Docker
+    # --------------------------------------------------------------------------
+    # Подсистема Elasticsearch (Выполняется только на хосте logging_storage)
+    # --------------------------------------------------------------------------
+    - name: "Elasticsearch: настройка vm.max_map_count"
+      sysctl:
+        name: vm.max_map_count
+        value: "262144"
+        state: present
+        reload: yes
+      when: inventory_hostname in groups['logging_storage']
+
+    - name: "Elasticsearch: установка зависимостей"
       apt:
-        name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - lsb-release
+        name: [apt-transport-https, curl, jq, default-jre]
         state: present
         update_cache: yes
+      when: inventory_hostname in groups['logging_storage']
 
-    - name: Install Docker and Compose from Debian repository
-      apt:
-        name:
-          - docker.io
-          - docker-compose
-        state: present
-
-    - name: Sozdanie rabochej direktorii dlya Elastic
-      file:
-        path: /opt/elastic-stack
-        state: directory
-        mode: '0755'
-
-    - name: Zapiss konfiguracii docker-compose.yml dlya Elasticsearch
-      copy:
-        dest: /opt/elastic-stack/docker-compose.yml
-        content: |
-          version: '3.8'
-          services:
-            elasticsearch:
-              image: {{ elastic_image_full }}
-              container_name: elasticsearch-node
-              environment:
-                - discovery.type=single-node
-                - xpack.security.enabled=false
-                - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-              ports:
-                - "9200:9200"
-              volumes:
-                - elastic-data:/usr/share/elasticsearch/data
-              restart: always
-
-          volumes:
-            elastic-data:
-              driver: local
-        mode: '0644'
-
-    - name: Zapusk conteinera Elasticsearch cherez docker-compose up
-      shell: "docker-compose -f /opt/elastic-stack/docker-compose.yml down && docker-compose -f /opt/elastic-stack/docker-compose.yml up -d"
-
-# ==============================================================================
-# CHAST 2: AUTOMATIC ZAPUSK CONTEINERA KIBANA bez avtorizacii
-# ==============================================================================
-- name: Deploy Kibana Container directly to Bastion Node
-  hosts: bastion
-  become: yes
-  vars:
-    host_gcr: "mirror.gcr.io"
-    folder_kibana: "/kibana"
-    tag_kibana: ":8.11.3"
-    kibana_image_full: "{{ [host_gcr, folder_kibana, tag_kibana] | join('') }}"
-    elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
-  tasks:
-    - name: Install system dependencies for Docker on Bastion
-      apt:
-        name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - lsb-release
-        state: present
-        update_cache: yes
-
-    - name: Install Docker and Compose on Bastion from Debian repository
-      apt:
-        name:
-          - docker.io
-          - docker-compose
-        state: present
-
-    - name: Create working directory for Kibana on Bastion
-      file:
-        path: /opt/kibana-stack
-        state: directory
-        mode: '0755'
-
-    - name: Zapiss konfiguracii docker-compose.yml dlya Kibana UI
-      copy:
-        dest: /opt/kibana-stack/docker-compose.yml
-        content: |
-          version: '3.8'
-          services:
-            kibana:
-              image: {{ kibana_image_full }}
-              container_name: kibana-dashboard
-              environment:
-                - ELASTICSEARCH_HOSTS=http://{{ elastic_internal_ip }}:9200
-                - SERVER_HOST=0.0.0.0
-              ports:
-                - "5601:5601"
-              restart: always
-        mode: '0644'
-
-    - name: Zapusk conteinera Kibana cherez docker-compose up
-      shell: "docker-compose -f /opt/kibana-stack/docker-compose.yml down && docker-compose -f /opt/kibana-stack/docker-compose.yml up -d"
-
-# ==============================================================================
-# CHAST 3: RECURSIVE USTANOVKA FILEBEAT bez avtorizacii v bazy
-# ==============================================================================
-- name: Deploy Native Filebeat Service on Web Servers
-  hosts: webservers
-  become: yes
-  vars:
-    prefix_net: "https://"
-    host_mirror: "mirror.yandex.ru"
-    pool_path: "/mirrors/elastic/8/pool/main"
-    package_dir: "/f/filebeat"
-    file_deb: "/filebeat-8.11.3-amd64.deb"
-    filebeat_download_url: "{{ [prefix_net, host_mirror, pool_path, package_dir, file_deb] | join('') }}"
-    elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
-  tasks:
-    - name: Skachivanie oficialnogo paketa Filebeat DEB s zerkala Yandeksa
+    - name: "Elasticsearch: скачивание пакета"
       get_url:
-        url: "{{ filebeat_download_url }}"
-        dest: /tmp/filebeat.deb
-        mode: '0644'
+        url: "{{ url_elastic_8113 }}"
+        dest: "/tmp/elasticsearch-8.11.3.deb"
+        mode: "0644"
+      when: inventory_hostname in groups['logging_storage']
 
-    - name: Ustanovka Filebeat sluzhby iz lokalnogo fajла DEB
+    - name: "Elasticsearch: установка пакета"
       apt:
-        deb: /tmp/filebeat.deb
+        deb: "/tmp/elasticsearch-8.11.3.deb"
         state: present
+      when: inventory_hostname in groups['logging_storage']
 
-    - name: Zapiss vnutrennego konfiga sbora logov v /etc/filebeat/filebeat.yml
+    - name: "Elasticsearch: очистка и установка лимитов JVM"
+      lineinfile:
+        path: /etc/elasticsearch/jvm.options
+        regexp: "^-Xm"
+        state: absent
+      when: inventory_hostname in groups['logging_storage']
+
+    - name: "Elasticsearch: установка новых лимитов JVM"
+      lineinfile:
+        path: /etc/elasticsearch/jvm.options
+        line: "{{ item }}"
+      loop:
+        - "{{ elastic_jvm_min }}"
+        - "{{ elastic_jvm_max }}"
+      when: inventory_hostname in groups['logging_storage']
+
+    - name: "Elasticsearch: полное пересоздание чистого Keystore"
+      shell: |
+        rm -f /etc/elasticsearch/elasticsearch.keystore
+        /usr/share/elasticsearch/bin/elasticsearch-keystore create
+      register: keystore_recreate
+      failed_when: keystore_recreate.rc != 0
+      when: inventory_hostname in groups['logging_storage']
+
+    - name: "Elasticsearch: генерация конфигурации без X-Pack"
       copy:
-        dest: /etc/filebeat/filebeat.yml
+        dest: /etc/elasticsearch/elasticsearch.yml
         content: |
-          filebeat.inputs:
-          - type: log
-            enabled: true
-            paths: [ /var/log/nginx/access.log ]
-            tags: ["nginx-access"]
-          - type: log
-            enabled: true
-            paths: [ /var/log/nginx/error.log ]
-            tags: ["nginx-error"]
-
-          output.elasticsearch:
-            hosts: ["http://{{ elastic_internal_ip }}:9200"]
-            index: "nginx-logs-%{+yyyy.MM.dd}"
-
-          setup.template.name: "nginx"
-          setup.template.pattern: "nginx-logs-*"
+          cluster.name: coursework-logging-cluster
+          node.name: {{ inventory_hostname }}
+          path.data: /var/lib/elasticsearch
+          path.logs: /var/log/elasticsearch
+          network.host: 0.0.0.0
+          http.port: 9200
+          discovery.type: single-node
+          ingest.geoip.downloader.enabled: false
+          xpack.security.enabled: false
         owner: root
-        group: root
-        mode: '0644'
+        group: elasticsearch
+        mode: "0660"
+      when: inventory_hostname in groups['logging_storage']
 
-    - name: Obnovlenie kesha systemd demonov dlya Filebeat
+    - name: "Elasticsearch: запуск службы"
       systemd:
-        daemon_reload: yes
-
-    - name: Zapusk i vklyuchenie avtozagruzku sluzhby Filebeat
-      systemd:
-        name: filebeat
+        name: elasticsearch
         state: restarted
         enabled: yes
+        daemon_reload: yes
+      when: inventory_hostname in groups['logging_storage']
+
+    # --------------------------------------------------------------------------
+    # Подсистема Kibana (Выполняется только на хосте kibana_host!)
+    # --------------------------------------------------------------------------
+
+    - name: "Kibana: Ожидание полной готовности API Elasticsearch по внутренней сети"
+      uri:
+        url: "http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"
+        status_code: 200
+        timeout: 5 # Защита: сбрасывать зависший запрос через 5 секунд, если сеть еще не поднялась
+      register: es_api_check
+      until: es_api_check.status == 200
+      retries: 60  # Даем Java-машине до 10 минут на холодный старт в Яндексе
+      delay: 10
+      when: inventory_hostname in groups['kibana_host']
+      become: no # Запрос выполняется от пользователя debian, sudo не требуется
+
+
+    - name: "Kibana: установка системных зависимостей"
+      apt:
+        name: [apt-transport-https, curl, jq]
+        state: present
+      when: inventory_hostname in groups['kibana_host']
+
+    - name: "Kibana: скачивание пакета с зеркала Яндекса"
+      get_url:
+        url: "{{ url_kibana_8113 }}"
+        dest: "/tmp/kibana-8.11.3.deb"
+        mode: "0644"
+      when: inventory_hostname in groups['kibana_host']
+
+    - name: "Kibana: принудительная установка пакета"
+      apt:
+        deb: "/tmp/kibana-8.11.3.deb"
+        state: present
+      when: inventory_hostname in groups['kibana_host']
+
+    - name: "Kibana: создание директории логов"
+      file:
+        path: "/var/log/kibana"
+        owner: kibana
+        group: kibana
+        state: directory
+        mode: "0750"
+      when: inventory_hostname in groups['kibana_host']
+
+    - name: "Kibana: генерация конфигурации связи с базой логов"
+      copy:
+        dest: /etc/kibana/kibana.yml
+        content: |
+          server.port: 5601
+          server.host: "0.0.0.0"
+          elasticsearch.hosts: ["http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
+          xpack.security.enabled: false
+        owner: root
+        group: kibana
+        mode: "0660"
+      when: inventory_hostname in groups['kibana_host']
+
+    - name: "Kibana: запуск и активация службы в systemd"
+      systemd:
+        name: kibana
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      when: inventory_hostname in groups['kibana_host']
+
+    - name: "Kibana: ожидание открытия сетевого порта 5601"
+      wait_for:
+        host: 0.0.0.0
+        port: 5601
+        timeout: 120
+      when: inventory_hostname in groups['kibana_host']

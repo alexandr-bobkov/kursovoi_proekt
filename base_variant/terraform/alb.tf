@@ -1,14 +1,16 @@
-# --- БАЛАНСИРОВЩИК ТРАФИКА (ALB) ---
+# ==============================================================================
+# БАЛАНСИРОВЩИК ТРАФИКА (APPLICATION LOAD BALANCER)
+# ==============================================================================
 
 resource "yandex_alb_target_group" "web_tg" {
   name = "site-target-group"
   target {
     subnet_id  = yandex_vpc_subnet.private_a.id
-    ip_address = yandex_compute_instance.web_1.network_interface[0].ip_address
+    ip_address = yandex_compute_instance.web_1.network_interface.0.ip_address
   }
   target {
     subnet_id  = yandex_vpc_subnet.private_b.id
-    ip_address = yandex_compute_instance.web_2.network_interface[0].ip_address
+    ip_address = yandex_compute_instance.web_2.network_interface.0.ip_address
   }
 }
 
@@ -73,7 +75,7 @@ resource "yandex_alb_load_balancer" "web_alb" {
     endpoint {
       address {
         external_ipv4_address {
-          address = yandex_vpc_address.alb_address.external_ipv4_address[0].address
+          address = yandex_vpc_address.alb_address.external_ipv4_address.0.address
         }
       }
       ports = [80]
@@ -86,50 +88,46 @@ resource "yandex_alb_load_balancer" "web_alb" {
   }
 }
 
-# --- ПЛАНЫ РЕЗЕРВНОГО КОПИРОВАНИЯ (БЭКАПЫ) ---
-
-resource "yandex_compute_snapshot_schedule" "daily_backup" {
-  name = "infrastructure-daily-backup-plan"
-  schedule_policy {
-    expression = "0 2 * * *"
-  }
-  retention_period = "168h"
-  snapshot_spec {
-    description = "Daily automatic backup snapshot"
-  }
-  disk_ids = [
-    yandex_compute_instance.bastion.boot_disk[0].disk_id,
-    yandex_compute_instance.web_1.boot_disk[0].disk_id,
-    yandex_compute_instance.web_2.boot_disk[0].disk_id,
-    yandex_compute_instance.prometheus.boot_disk[0].disk_id,
-    yandex_compute_instance.opensearch.boot_disk[0].disk_id,
-     ]
-}
-
-# --- ВЫВОД IP АДРЕСОВ В ТЕРМИНАЛ (ОУТПУТЫ) ---
+# ==============================================================================
+# ВЫВОД IP АДРЕСОВ В ТЕРМИНАЛ (ИСПРАВЛЕННЫЕ ОУТПУТЫ)
+# ==============================================================================
 
 output "IP_BASTION_HOST_PUBLIC" {
-  value = yandex_compute_instance.bastion.network_interface[0].nat_ip_address
+  value       = yandex_compute_instance.bastion.network_interface.0.nat_ip_address
+  description = "Public IP address for SSH ProxyJump connections"
 }
+
 output "IP_BALANCER_SITE_PUBLIC" {
-  value = yandex_vpc_address.alb_address.external_ipv4_address[0].address
+  value       = yandex_vpc_address.alb_address.external_ipv4_address.0.address
+  description = "Public IP address of the main website"
 }
-output "IP_GRAFANA_AND_LOGS_PUBLIC" {
-  value = yandex_compute_instance.bastion.network_interface[0].nat_ip_address
+
+output "IP_GRAFANA_PUBLIC" {
+  value       = yandex_compute_instance.grafana.network_interface.0.nat_ip_address
+  description = "Public IP address for accessing Grafana dashboards (Port 3000)"
 }
+
+output "IP_KIBANA_PUBLIC" {
+  value       = yandex_compute_instance.kibana.network_interface.0.nat_ip_address
+  description = "Public IP address for accessing Kibana web interface (Port 5601)"
+}
+
 output "IP_INTERNAL_WEB_SERVER_1" {
-  value = yandex_compute_instance.web_1.network_interface[0].ip_address
+  value       = yandex_compute_instance.web_1.network_interface.0.ip_address
+  description = "Internal private IP of web-node-1"
 }
+
 output "IP_INTERNAL_WEB_SERVER_2" {
-  value = yandex_compute_instance.web_2.network_interface[0].ip_address
+  value       = yandex_compute_instance.web_2.network_interface.0.ip_address
+  description = "Internal private IP of web-node-2"
 }
+
 output "IP_INTERNAL_PROMETHEUS" {
-  value = yandex_compute_instance.prometheus.network_interface[0].ip_address
-}
-output "IP_INTERNAL_OPENSEARCH_STORAGE" {
-  value = yandex_compute_instance.opensearch.network_interface[0].ip_address
+  value       = yandex_compute_instance.prometheus.network_interface.0.ip_address
+  description = "Internal private IP of Prometheus monitoring core"
 }
 
-
-
-
+output "IP_INTERNAL_ELASTICSEARCH_STORAGE" {
+  value       = yandex_compute_instance.opensearch.network_interface.0.ip_address
+  description = "Internal private IP of Elasticsearch storage host"
+}
