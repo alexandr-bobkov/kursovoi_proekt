@@ -1,132 +1,223 @@
-terraform {
-  required_providers {
-    yandex = {
-      source  = "yandex-cloud/yandex"
-      version = "~> 0.80"
-    }
-  }
-}
-
-provider "yandex" {
-  folder_id                = var.yandex_folder_id
-  service_account_key_file = var.yandex_service_account_key_file
-}
-
-data "yandex_iam_service_account" "ig_sa" {
-  name      = "kuruser"
-  folder_id = var.yandex_folder_id
-}
-
-data "yandex_compute_image" "debian_13" {
+data "yandex_compute_image" "debian" {
   family = "debian-13"
 }
 
+# ==============================================================================
+# 1. ХОСТ-БАСТИОН (ЕДИНСТВЕННЫЙ ВНЕШНИЙ SSH ШЛЮЗ КОНТУРА)
+# ==============================================================================
 resource "yandex_compute_instance" "bastion" {
-  name        = "bastion-host-enterprise"
-  hostname    = "bastion-host-enterprise"
-  platform_id = "standard-v3"
+  name        = "enterprise-bastion"
   zone        = "ru-central1-a"
+  platform_id = "standard-v3"
 
   resources {
-    cores  = 2
-    memory = 2
-    
+    cores         = 2
+    memory        = 2
+    core_fraction = 20
   }
+
   boot_disk {
     initialize_params {
-      image_id = data.yandex_compute_image.debian_13.id
-      size     = 10
+      image_id = data.yandex_compute_image.debian.id
+      size     = 15
     }
   }
+
   network_interface {
     subnet_id          = yandex_vpc_subnet.public_a.id
-    security_group_ids = [yandex_vpc_security_group.bastion_sg.id]
     nat                = true
+    security_group_ids = [yandex_vpc_security_group.bastion_sg.id]
   }
+
   metadata = {
-    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
+    user-data = <<EOT
+#cloud-config
+users:
+  - name: debian
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+EOT
   }
 }
 
+# ==============================================================================
+# 2. ВЫДЕЛЕННЫЙ СЕРВЕР ВЕБ-ПАНЕЛИ GRAFANA И PROMETHEUS (ВНЕШНИЙ IP ВКЛЮЧЕН)
+# ==============================================================================
 resource "yandex_compute_instance" "prometheus" {
-  name        = "prometheus-server-ent"
-  hostname    = "prometheus-server-ent"
-  platform_id = "standard-v3"
+  name        = "enterprise-grafana-server"
   zone        = "ru-central1-a"
+  platform_id = "standard-v3"
 
   resources {
-    cores  = 2
-    memory = 2
-    
+    cores         = 2
+    memory        = 2
+    core_fraction = 20
   }
+
   boot_disk {
     initialize_params {
-      image_id = data.yandex_compute_image.debian_13.id
+      image_id = data.yandex_compute_image.debian.id
+      size     = 15
+    }
+  }
+
+  network_interface {
+    subnet_id          = yandex_vpc_subnet.public_a.id
+    nat                = true # Разрешаем внешний IP для проверки преподавателем
+    security_group_ids = [yandex_vpc_security_group.grafana_sg.id]
+  }
+
+  metadata = {
+    user-data = <<EOT
+#cloud-config
+users:
+  - name: debian
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+EOT
+  }
+}
+
+# ==============================================================================
+# 3. ВЫДЕЛЕННЫЙ СЕРВЕР ВЕБ-ПАНЕЛИ KIBANA (ВНЕШНИЙ IP ВКЛЮЧЕН)
+# ==============================================================================
+resource "yandex_compute_instance" "kibana_server" {
+  name        = "enterprise-kibana-server"
+  zone        = "ru-central1-a"
+  platform_id = "standard-v3"
+
+  resources {
+    cores         = 2
+    memory        = 2
+    core_fraction = 20
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = data.yandex_compute_image.debian.id
+      size     = 15
+    }
+  }
+
+  network_interface {
+    subnet_id          = yandex_vpc_subnet.public_a.id
+    nat                = true # Разрешаем внешний IP для проверки преподавателем
+    security_group_ids = [yandex_vpc_security_group.kibana_sg.id]
+  }
+
+  metadata = {
+    user-data = <<EOT
+#cloud-config
+users:
+  - name: debian
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+EOT
+  }
+}
+
+# ==============================================================================
+# 4. ИЗОЛИРОВАННАЯ БАЗА ДАННЫХ ЛОГОВ (ELASTICSEARCH STORAGE - ИЗОЛИРОВАНА)
+# ==============================================================================
+resource "yandex_compute_instance" "elasticsearch_storage" {
+  name        = "enterprise-elasticsearch-storage"
+  zone        = "ru-central1-a"
+  platform_id = "standard-v3"
+
+  resources {
+    cores         = 2
+    memory        = 4
+    core_fraction = 20
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = data.yandex_compute_image.debian.id
       size     = 20
     }
   }
+
   network_interface {
     subnet_id          = yandex_vpc_subnet.private_a.id
+    nat                = false # Оставляем строго приватным по Zero Trust
     security_group_ids = [yandex_vpc_security_group.internal_mgmt_sg.id]
   }
+
   metadata = {
-    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
+    user-data = <<EOT
+#cloud-config
+users:
+  - name: debian
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+EOT
   }
 }
 
-resource "yandex_compute_instance" "opensearch" {
-  name        = "elasticsearch-storage-ent"
-  hostname    = "elasticsearch-storage-ent"
-  platform_id = "standard-v3"
-  zone        = "ru-central1-a"
+# ==============================================================================
+# 5. ДИНАМИЧЕСКАЯ ГРУППА МАСШТАБИРОВАНИЯ ВЕБ-СЕРВЕРОВ (CORE_FRACTION = 100)
+# ==============================================================================
+resource "yandex_iam_service_account" "ig_sa" {
+  name = "enterprise-ig-service-account"
+}
 
-  resources {
-    cores  = 2
-    memory = 4
-    
-  }
-  boot_disk {
-    initialize_params {
-      image_id = data.yandex_compute_image.debian_13.id
-      size     = 25
-    }
-  }
-  network_interface {
-    subnet_id          = yandex_vpc_subnet.private_a.id # FIXED: Теперь железно в правильной приватной сети!
-    security_group_ids = [yandex_vpc_security_group.internal_mgmt_sg.id]
-  }
-  metadata = {
-    ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
-  }
+resource "yandex_resourcemanager_folder_iam_member" "ig_editor" {
+  folder_id = var.yandex_folder_id
+  role      = "editor"
+  member    = "serviceAccount:${yandex_iam_service_account.ig_sa.id}"
 }
 
 resource "yandex_compute_instance_group" "web_group" {
-  name               = "web-servers-instance-group"
+  name               = "enterprise-dynamic-web-group"
   folder_id          = var.yandex_folder_id
-  service_account_id = data.yandex_iam_service_account.ig_sa.id
+  service_account_id = yandex_iam_service_account.ig_sa.id
 
   instance_template {
-    name        = "web-node-{instance.index}"
+    name = "web-node-{instance.index}"
     platform_id = "standard-v3"
     resources {
-      cores  = 2
-      memory = 2
-      
+      cores         = 2
+      memory        = 2
+      core_fraction = 100 # Гарантия процессора 100% для легитимного автоскейлинга по CPU
     }
+
     boot_disk {
       mode = "READ_WRITE"
       initialize_params {
-        image_id = data.yandex_compute_image.debian_13.id
+        image_id = data.yandex_compute_image.debian.id
         size     = 15
       }
     }
+
     network_interface {
       network_id         = yandex_vpc_network.main_vpc.id
       subnet_ids         = [yandex_vpc_subnet.private_a.id, yandex_vpc_subnet.private_b.id]
-      security_group_ids = [yandex_vpc_security_group.web_sg.id, yandex_vpc_security_group.internal_mgmt_sg.id]
+      security_group_ids = [yandex_vpc_security_group.web_sg.id]
     }
+
     metadata = {
-      ssh-keys = "debian:${file("~/.ssh/id_rsa.pub")}"
+      user-data = <<EOT
+#cloud-config
+users:
+  - name: debian
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+EOT
     }
   }
 
@@ -145,94 +236,88 @@ resource "yandex_compute_instance_group" "web_group" {
   }
 
   deploy_policy {
-    max_unavailable = 2
+    max_unavailable = 1
+    max_creating    = 1
     max_expansion   = 1
+    max_deleting    = 1
   }
 
   application_load_balancer {
-    target_group_name = "web-servers-target-group"
+    target_group_name = "dynamic-web-target-group"
   }
+
+  depends_on = [yandex_resourcemanager_folder_iam_member.ig_editor]
 }
 
-resource "null_resource" "ansible_auto_run" {
-  depends_on = [
-    yandex_compute_instance.bastion,
-    yandex_compute_instance_group.web_group,
-    yandex_compute_instance.prometheus,
-    yandex_compute_instance.opensearch
-  ]
-
-  triggers = {
-    web_nodes_changed = join(",", yandex_compute_instance_group.web_group.instances[*].name)
-  }
-
-  provisioner "local-exec" {
-    command = <<EOT
-cat <<EOF > ../ansible/hosts.ini
+# ==============================================================================
+# 6. АВТОГЕНЕРАЦИЯ ИНВЕНТАРЯ ANSIBLE (ИТОГОВАЯ ИСПРАВЛЕННАЯ СБОРКА)
+# ==============================================================================
+resource "local_file" "ansible_inventory" {
+  filename = "${path.module}/../ansible/hosts.ini"
+  content  = <<EOT
 [bastion]
-bastion_host ansible_host=${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} ansible_user=debian
+bastion_host ansible_host=${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} ansible_user=debian ansible_ssh_common_args=""
 
-[webservers]
-%{ for instance in yandex_compute_instance_group.web_group.instances ~}
-${instance.name} ansible_host=${instance.network_interface.0.ip_address} ansible_user=debian
-%{ endfor ~}
+[kibana_host]
+kibana_server ansible_host=${yandex_compute_instance.kibana_server.network_interface.0.ip_address} ansible_user=debian elastic_target_ip=${yandex_compute_instance.elasticsearch_storage.network_interface.0.ip_address}
+
+[grafana_host]
+grafana_server ansible_host=${yandex_compute_instance.prometheus.network_interface.0.ip_address} ansible_user=debian postgres_target_ip=${yandex_compute_instance.elasticsearch_storage.network_interface.0.ip_address}
 
 [logging_storage]
-elasticsearch_server ansible_host=${yandex_compute_instance.opensearch.network_interface.0.ip_address} ansible_user=debian
+elasticsearch_server ansible_host=${yandex_compute_instance.elasticsearch_storage.network_interface.0.ip_address} ansible_user=debian
 
-[prometheus_host]
-prometheus_server ansible_host=${yandex_compute_instance.prometheus.network_interface.0.ip_address} ansible_user=debian
-
-[public_mgmt]
-grafana_kibana_server ansible_host=${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} ansible_user=debian
+[web_nodes]
+%{ for index, instance in yandex_compute_instance_group.web_group.instances ~}
+web-node-${index} ansible_host=${instance.network_interface.0.ip_address} ansible_user=debian
+%{ endfor ~}
 
 [all:vars]
-ansible_user=debian
-ansible_ssh_private_key_file=/home/user/.ssh/id_rsa
-ansible_ssh_common_args="-o StrictHostKeyChecking=no -o ProxyJump=debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}"
+# Фиксируем верный тип приватного ключа
+ansible_ssh_private_key_file="~/.ssh/id_ed25519"
 
-[bastion:vars]
-ansible_ssh_common_args="-o StrictHostKeyChecking=no"
+[internal:children]
+kibana_host
+grafana_host
+logging_storage
+web_nodes
 
-[public_mgmt:vars]
-ansible_ssh_common_args="-o StrictHostKeyChecking=no"
-EOF
-
-cat <<EOF > ../ansible/prometheus.yml
-${templatefile("../ansible/prometheus.yml.tpl", {
-  web_node_1           = yandex_compute_instance_group.web_group.instances[0].network_interface[0].ip_address
-  web_node_2           = yandex_compute_instance_group.web_group.instances[1].network_interface[0].ip_address
-  prometheus_server   = yandex_compute_instance.prometheus.network_interface[0].ip_address
-  elasticsearch_server = yandex_compute_instance.opensearch.network_interface[0].ip_address
-  bastion_host         = yandex_compute_instance.bastion.network_interface[0].ip_address
-})}
-EOF
+[internal:vars]
+# Явно передаем путь к ключу внутрь туннеля прыжка, чтобы local-exec в Terraform не зависел от агентов памяти
+ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand='ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -l debian ${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'"
 EOT
-  }
-
-      # УМНЫЙ RUNNER: ЖДЕТ РЕАЛЬНОГО СТАРТА SSH НА БАСТИОНЕ И ЗАПУСКАЕТ ANSIBLE БЕЗ ПРОВЕРОК
-  provisioner "local-exec" {
-    command = <<EOT
-echo "Ozhidaem poyavleniya SSH na Bastione..."
-until nc -z -w 3 ${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} 22; do
-  echo "SSH isheshe ne gotov, spim 5 sekund..."
-  sleep 5
-done
-echo "SSH na Bastione uspeshno podnyalsya! Zapuskaem deploy..."
-
-# Принудительно очищаем старый отпечаток для этого конкретного IP-адреса из known_hosts на лету
-ssh-keygen -f "~/.ssh/known_hosts" -R "${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}" || true
-
-# Отключаем проверку ключей хоста на уровне окружения Ansible
-export ANSIBLE_HOST_KEY_CHECKING=False
-
-# Дополнительно передаем флаги игнорирования ключей при вызове скрипта (если внутри используются нативные команды ssh)
-export SSH_ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-bash run_ansible.sh
-EOT
-  }
 }
 
 
 
+
+
+
+
+# ==============================================================================
+# 7. ИНФРАСТРУКТУРНЫЙ БЭКАП ВСЕХ ДИСКОВ КОНТУРА (SNAPSHOT SCHEDULE)
+# ==============================================================================
+resource "yandex_compute_snapshot_schedule" "enterprise_backup" {
+  name = "enterprise-global-snapshot-schedule"
+
+  schedule_policy {
+    expression = "0 2 * * *"
+  }
+
+  snapshot_count = 7
+
+  disk_ids = [
+    yandex_compute_instance.bastion.boot_disk.0.disk_id,
+    yandex_compute_instance.prometheus.boot_disk.0.disk_id,
+    yandex_compute_instance.kibana_server.boot_disk.0.disk_id,
+    yandex_compute_instance.elasticsearch_storage.boot_disk.0.disk_id # Бэкап Elasticsearch включен!
+  ]
+}
+
+resource "null_resource" "null_ansible_trigger" {
+  depends_on = [local_file.ansible_inventory, yandex_compute_instance_group.web_group]
+
+  provisioner "local-exec" {
+    command = "bash run_ansible.sh"
+  }
+}

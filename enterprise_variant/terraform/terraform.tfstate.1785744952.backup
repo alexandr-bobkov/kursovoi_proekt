@@ -1,0 +1,589 @@
+{
+  "version": 4,
+  "terraform_version": "1.14.4",
+  "serial": 627,
+  "lineage": "1e33a1ad-eda7-0b8d-8ba2-8ce793f47b0b",
+  "outputs": {},
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "tls_private_key",
+      "name": "alb_key",
+      "provider": "provider[\"registry.terraform.io/hashicorp/tls\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "algorithm": "RSA",
+            "ecdsa_curve": "P224",
+            "id": "1ee02deb25817931b3dc8c8e9744a59c106d49c9",
+            "private_key_openssh": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABFwAAAAdz\nc2gtcnNhAAAAAwEAAQAAAQEAz9kMko5Q0l7jEFdgcbs1i8YZ/2V+SbNArEz8SyFh\nZTV6/StoAB2BuTr+ne80DB1XimN6+SDR81qd8mtTMMz/vObhg9BzlYsEKV8ax2+S\nN9qfFwijtVBDbE10L9xPyg9aEMRkn+eg+JKbShNL1g4+hdyi35Pu+B1vTs7XXPxb\nd8/lf14d3Q/IJ2L5ryM8FSs3P0vRgkIZuSdXFIM7g9o4WDBY2lWxle66UqWrpReC\nVJnhqJhVI8yihpYpPjrErXP4UP+OV5OF0Gmnr0n1UfQ8+oyDMehY/RKCRHYRSenG\nfHzNv5rN5hTrcF92qldTjD7yhF2YcHOzD/7j1X/5XWJ3TwAAA7g2tByNNrQcjQAA\nAAdzc2gtcnNhAAABAQDP2QySjlDSXuMQV2BxuzWLxhn/ZX5Js0CsTPxLIWFlNXr9\nK2gAHYG5Ov6d7zQMHVeKY3r5INHzWp3ya1MwzP+85uGD0HOViwQpXxrHb5I32p8X\nCKO1UENsTXQv3E/KD1oQxGSf56D4kptKE0vWDj6F3KLfk+74HW9Oztdc/Ft3z+V/\nXh3dD8gnYvmvIzwVKzc/S9GCQhm5J1cUgzuD2jhYMFjaVbGV7rpSpaulF4JUmeGo\nmFUjzKKGlik+OsStc/hQ/45Xk4XQaaevSfVR9Dz6jIMx6Fj9EoJEdhFJ6cZ8fM2/\nms3mFOtwX3aqV1OMPvKEXZhwc7MP/uPVf/ldYndPAAAAAwEAAQAAAQAkL7PCqEhl\n9+Msayn9YwyVgy3viyoLhsvRs62RHwSn7EG3ZiE7M+fr6dt+f7DeExW0oFE+onor\nFjG9jPX03xv/NWs52cbl2EgnM8mjw0b/tm5QQk7OOGUkq+94jbDOixGxLaAfPuKF\npHCo2ucvI1e7UoiAyG6of+drHxPbuovqNdVyUUqAyiaoT/JgYFum32RiZlX3U+/9\nMeIdYntJ6bW7c5FIrenOBE29HB+PxEQmrelSuW8bdK6Da8ODcZMEF5PHYrVuPLVP\nPKhC+vxinVXS2mf4ijISkpHDoSRBXY7t/H6B+v1XQFOyGC0tUMNOin+erOiYUodK\nUCBDuhB+9uKxAAAAgBcCWRAqiUcTXmsU3QYQqHVrR47oGa/8ZJd9Eyt4vJwaUfK7\ntmxdNgneg+hfVoqItSBDpFZZZo5jV/DjIgOGXnD9q04a3zKd8TFOvOMb01NJUg7L\n+LycP6bK6vdtGu+cDHgCN/dfY9CpadWgREH6AmPEXa8SeT1Pd1kHOY0VqwNwAAAA\ngQDgI/nuDVPHiema9GeVLdNwqTueYK2Uiwau48H+6obfPXHNk9nGHfyA1P/AAZjb\nbpQLSwiPNQVrpKdXa+sS71Qdz9dD+SbQnw4GFKX2TXNpkkhW1K5lB960xcxITMxx\nI40c0C/IlVDetR4Ylz1usCgq3QIVRi/AEQrDp7vj7luLPQAAAIEA7WQ2+zf1obLR\n7wiSMFJi4EIXAx/sCaodQxuyMG30uBMKuMVbmbYuuAAvwUf1NUJTMr6a0NEfNfuY\nDy47RE4bumYWjCGeZGw7YP7E23y5WxlI6U2EYiYCetWbSzLU5uFoY2JZT6odgU1G\nUeFtnOYwlAYHCHR1xE8nlPx89ITN5XsAAAAAAQID\n-----END OPENSSH PRIVATE KEY-----\n",
+            "private_key_pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAz9kMko5Q0l7jEFdgcbs1i8YZ/2V+SbNArEz8SyFhZTV6/Sto\nAB2BuTr+ne80DB1XimN6+SDR81qd8mtTMMz/vObhg9BzlYsEKV8ax2+SN9qfFwij\ntVBDbE10L9xPyg9aEMRkn+eg+JKbShNL1g4+hdyi35Pu+B1vTs7XXPxbd8/lf14d\n3Q/IJ2L5ryM8FSs3P0vRgkIZuSdXFIM7g9o4WDBY2lWxle66UqWrpReCVJnhqJhV\nI8yihpYpPjrErXP4UP+OV5OF0Gmnr0n1UfQ8+oyDMehY/RKCRHYRSenGfHzNv5rN\n5hTrcF92qldTjD7yhF2YcHOzD/7j1X/5XWJ3TwIDAQABAoIBACQvs8KoSGX34yxr\nKf1jDJWDLe+LKguGy9GzrZEfBKfsQbdmITsz5+vp235/sN4TFbSgUT6ieisWMb2M\n9fTfG/81aznZxuXYSCczyaPDRv+2blBCTs44ZSSr73iNsM6LEbEtoB8+4oWkcKja\n5y8jV7tSiIDIbqh/52sfE9u6i+o11XJRSoDKJqhP8mBgW6bfZGJmVfdT7/0x4h1i\ne0nptbtzkUit6c4ETb0cH4/ERCat6VK5bxt0roNrw4NxkwQXk8ditW48tU88qEL6\n/GKdVdLaZ/iKMhKSkcOhJEFdju38foH6/VdAU7IYLS1Qw06Kf56s6JhSh0pQIEO6\nEH724rECgYEA4CP57g1Tx4npmvRnlS3TcKk7nmCtlIsGruPB/uqG3z1xzZPZxh38\ngNT/wAGY226UC0sIjzUFa6SnV2vrEu9UHc/XQ/km0J8OBhSl9k1zaZJIVtSuZQfe\ntMXMSEzMcSONHNAvyJVQ3rUeGJc9brAoKt0CFUYvwBEKw6e74+5biz0CgYEA7WQ2\n+zf1obLR7wiSMFJi4EIXAx/sCaodQxuyMG30uBMKuMVbmbYuuAAvwUf1NUJTMr6a\n0NEfNfuYDy47RE4bumYWjCGeZGw7YP7E23y5WxlI6U2EYiYCetWbSzLU5uFoY2JZ\nT6odgU1GUeFtnOYwlAYHCHR1xE8nlPx89ITN5XsCgYEA0jCqphSVZl/sU8WyhXDu\nAY6SPBmJbe1aHRO0zur8A8lJOXHXHTTtn5sfIt3cjJqL9nMs2a7tIF7OFus7DQym\nozZPNo0lWyptKkKex/Ulr/DgKZ1U1aWlsXxz77ElX0vpfwW0abOsnMzYJlNd5rkH\nUfrjgzPIf6L7pzNavYq/CjkCgYB3USOBaUMAnwx9hGVV/FLOPOmsHGNbCDHlBQqu\n5NVXn9qHvEqqG7OnsBBQqYZJ2qhOnRbbVgDF9UscdjQ7xLaTHbS/gjZGa0/9FJCF\ncU8IxtCq0tdzLX+ZlbuUNFxmH22EZm5VaD+kOd7aUN/zOI+6Fr16Nm7q2I4giDeV\n/xot+QKBgBcCWRAqiUcTXmsU3QYQqHVrR47oGa/8ZJd9Eyt4vJwaUfK7tmxdNgne\ng+hfVoqItSBDpFZZZo5jV/DjIgOGXnD9q04a3zKd8TFOvOMb01NJUg7L+LycP6bK\n6vdtGu+cDHgCN/dfY9CpadWgREH6AmPEXa8SeT1Pd1kHOY0VqwNw\n-----END RSA PRIVATE KEY-----\n",
+            "private_key_pem_pkcs8": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDP2QySjlDSXuMQ\nV2BxuzWLxhn/ZX5Js0CsTPxLIWFlNXr9K2gAHYG5Ov6d7zQMHVeKY3r5INHzWp3y\na1MwzP+85uGD0HOViwQpXxrHb5I32p8XCKO1UENsTXQv3E/KD1oQxGSf56D4kptK\nE0vWDj6F3KLfk+74HW9Oztdc/Ft3z+V/Xh3dD8gnYvmvIzwVKzc/S9GCQhm5J1cU\ngzuD2jhYMFjaVbGV7rpSpaulF4JUmeGomFUjzKKGlik+OsStc/hQ/45Xk4XQaaev\nSfVR9Dz6jIMx6Fj9EoJEdhFJ6cZ8fM2/ms3mFOtwX3aqV1OMPvKEXZhwc7MP/uPV\nf/ldYndPAgMBAAECggEAJC+zwqhIZffjLGsp/WMMlYMt74sqC4bL0bOtkR8Ep+xB\nt2YhOzPn6+nbfn+w3hMVtKBRPqJ6KxYxvYz19N8b/zVrOdnG5dhIJzPJo8NG/7Zu\nUEJOzjhlJKvveI2wzosRsS2gHz7ihaRwqNrnLyNXu1KIgMhuqH/nax8T27qL6jXV\nclFKgMomqE/yYGBbpt9kYmZV91Pv/THiHWJ7Sem1u3ORSK3pzgRNvRwfj8REJq3p\nUrlvG3Sug2vDg3GTBBeTx2K1bjy1TzyoQvr8Yp1V0tpn+IoyEpKRw6EkQV2O7fx+\ngfr9V0BTshgtLVDDTop/nqzomFKHSlAgQ7oQfvbisQKBgQDgI/nuDVPHiema9GeV\nLdNwqTueYK2Uiwau48H+6obfPXHNk9nGHfyA1P/AAZjbbpQLSwiPNQVrpKdXa+sS\n71Qdz9dD+SbQnw4GFKX2TXNpkkhW1K5lB960xcxITMxxI40c0C/IlVDetR4Ylz1u\nsCgq3QIVRi/AEQrDp7vj7luLPQKBgQDtZDb7N/WhstHvCJIwUmLgQhcDH+wJqh1D\nG7IwbfS4Ewq4xVuZti64AC/BR/U1QlMyvprQ0R81+5gPLjtEThu6ZhaMIZ5kbDtg\n/sTbfLlbGUjpTYRiJgJ61ZtLMtTm4WhjYllPqh2BTUZR4W2c5jCUBgcIdHXETyeU\n/Hz0hM3lewKBgQDSMKqmFJVmX+xTxbKFcO4BjpI8GYlt7VodE7TO6vwDyUk5cdcd\nNO2fmx8i3dyMmov2cyzZru0gXs4W6zsNDKajNk82jSVbKm0qQp7H9SWv8OApnVTV\npaWxfHPvsSVfS+l/BbRps6yczNgmU13muQdR+uODM8h/ovunM1q9ir8KOQKBgHdR\nI4FpQwCfDH2EZVX8Us486awcY1sIMeUFCq7k1Vef2oe8Sqobs6ewEFCphknaqE6d\nFttWAMX1Sxx2NDvEtpMdtL+CNkZrT/0UkIVxTwjG0KrS13Mtf5mVu5Q0XGYfbYRm\nblVoP6Q53tpQ3/M4j7oWvXo2burYjiCIN5X/Gi35AoGAFwJZECqJRxNeaxTdBhCo\ndWtHjugZr/xkl30TK3i8nBpR8ru2bF02Cd6D6F9Wioi1IEOkVllmjmNX8OMiA4Ze\ncP2rThrfMp3xMU684xvTU0lSDsv4vJw/psrq920a75wMeAI3919j0Klp1aBEQfoC\nY8RdrxJ5PU93WQc5jRWrA3A=\n-----END PRIVATE KEY-----\n",
+            "public_key_fingerprint_md5": "7c:55:3b:a2:bc:3f:20:b9:99:5a:b9:9b:b3:8f:4e:46",
+            "public_key_fingerprint_sha256": "SHA256:CLmBmdBbOMluJOS3CJgw02qk298v8AEA/SUFzSwxCPY",
+            "public_key_openssh": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDP2QySjlDSXuMQV2BxuzWLxhn/ZX5Js0CsTPxLIWFlNXr9K2gAHYG5Ov6d7zQMHVeKY3r5INHzWp3ya1MwzP+85uGD0HOViwQpXxrHb5I32p8XCKO1UENsTXQv3E/KD1oQxGSf56D4kptKE0vWDj6F3KLfk+74HW9Oztdc/Ft3z+V/Xh3dD8gnYvmvIzwVKzc/S9GCQhm5J1cUgzuD2jhYMFjaVbGV7rpSpaulF4JUmeGomFUjzKKGlik+OsStc/hQ/45Xk4XQaaevSfVR9Dz6jIMx6Fj9EoJEdhFJ6cZ8fM2/ms3mFOtwX3aqV1OMPvKEXZhwc7MP/uPVf/ldYndP\n",
+            "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz9kMko5Q0l7jEFdgcbs1\ni8YZ/2V+SbNArEz8SyFhZTV6/StoAB2BuTr+ne80DB1XimN6+SDR81qd8mtTMMz/\nvObhg9BzlYsEKV8ax2+SN9qfFwijtVBDbE10L9xPyg9aEMRkn+eg+JKbShNL1g4+\nhdyi35Pu+B1vTs7XXPxbd8/lf14d3Q/IJ2L5ryM8FSs3P0vRgkIZuSdXFIM7g9o4\nWDBY2lWxle66UqWrpReCVJnhqJhVI8yihpYpPjrErXP4UP+OV5OF0Gmnr0n1UfQ8\n+oyDMehY/RKCRHYRSenGfHzNv5rN5hTrcF92qldTjD7yhF2YcHOzD/7j1X/5XWJ3\nTwIDAQAB\n-----END PUBLIC KEY-----\n",
+            "rsa_bits": 2048
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_openssh"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_pem"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_pem_pkcs8"
+              }
+            ]
+          ],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "tls_self_signed_cert",
+      "name": "alb_cert",
+      "provider": "provider[\"registry.terraform.io/hashicorp/tls\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "allowed_uses": [
+              "key_encipherment",
+              "digital_signature",
+              "server_auth"
+            ],
+            "cert_pem": "-----BEGIN CERTIFICATE-----\nMIIDSjCCAjKgAwIBAgIRANcf5caEvIN3FkSjVBU8lrUwDQYJKoZIhvcNAQELBQAw\nRTEhMB8GA1UEChMYQm9ia292IERldk9wcyBFbnRlcnByaXNlMSAwHgYDVQQDExdl\nbnRlcnByaXNlLmJvYmtvdi5sb2NhbDAeFw0yNjA4MDExNjIzNDhaFw0yNzA4MDEx\nNjIzNDhaMEUxITAfBgNVBAoTGEJvYmtvdiBEZXZPcHMgRW50ZXJwcmlzZTEgMB4G\nA1UEAxMXZW50ZXJwcmlzZS5ib2Jrb3YubG9jYWwwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQDP2QySjlDSXuMQV2BxuzWLxhn/ZX5Js0CsTPxLIWFlNXr9\nK2gAHYG5Ov6d7zQMHVeKY3r5INHzWp3ya1MwzP+85uGD0HOViwQpXxrHb5I32p8X\nCKO1UENsTXQv3E/KD1oQxGSf56D4kptKE0vWDj6F3KLfk+74HW9Oztdc/Ft3z+V/\nXh3dD8gnYvmvIzwVKzc/S9GCQhm5J1cUgzuD2jhYMFjaVbGV7rpSpaulF4JUmeGo\nmFUjzKKGlik+OsStc/hQ/45Xk4XQaaevSfVR9Dz6jIMx6Fj9EoJEdhFJ6cZ8fM2/\nms3mFOtwX3aqV1OMPvKEXZhwc7MP/uPVf/ldYndPAgMBAAGjNTAzMA4GA1UdDwEB\n/wQEAwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATAMBgNVHRMBAf8EAjAAMA0GCSqG\nSIb3DQEBCwUAA4IBAQA61BYTHeO/vcJ0Wfe9o7r7Dzomcw/aee3PrYmW+fdBas30\n4IVV8jZDk5hMi4DWZHuXIbTlqHwLu0w7UwiMKJMSOS/b/TJYgrRoSJW3RVpVxFF1\nJ9KDIYHdhHcLPYiiAcZzKTe3n+gSb7YzpqT62AzXHVhUUPbD4F1h4wJRO/TPJd/r\nxplzSHolDjy6n+tud8XKCIAbR8zRFEPPY8D2lWatEQYQ8tT105VItWjMdpI9qnWg\nsZkeMhPfHdLB/qB6maeJbqtwVt8OUOnwhOQEgrYq3VfgdPXtqSbXGd/30a5j5smb\n83/JbL1h4RnuGCtdUxWbB/lc+FTKFXf+RA+Z4a0e\n-----END CERTIFICATE-----\n",
+            "dns_names": null,
+            "early_renewal_hours": 0,
+            "id": "285949640696426826564950377788981679797",
+            "ip_addresses": null,
+            "is_ca_certificate": false,
+            "key_algorithm": "RSA",
+            "max_path_length": null,
+            "private_key_pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAz9kMko5Q0l7jEFdgcbs1i8YZ/2V+SbNArEz8SyFhZTV6/Sto\nAB2BuTr+ne80DB1XimN6+SDR81qd8mtTMMz/vObhg9BzlYsEKV8ax2+SN9qfFwij\ntVBDbE10L9xPyg9aEMRkn+eg+JKbShNL1g4+hdyi35Pu+B1vTs7XXPxbd8/lf14d\n3Q/IJ2L5ryM8FSs3P0vRgkIZuSdXFIM7g9o4WDBY2lWxle66UqWrpReCVJnhqJhV\nI8yihpYpPjrErXP4UP+OV5OF0Gmnr0n1UfQ8+oyDMehY/RKCRHYRSenGfHzNv5rN\n5hTrcF92qldTjD7yhF2YcHOzD/7j1X/5XWJ3TwIDAQABAoIBACQvs8KoSGX34yxr\nKf1jDJWDLe+LKguGy9GzrZEfBKfsQbdmITsz5+vp235/sN4TFbSgUT6ieisWMb2M\n9fTfG/81aznZxuXYSCczyaPDRv+2blBCTs44ZSSr73iNsM6LEbEtoB8+4oWkcKja\n5y8jV7tSiIDIbqh/52sfE9u6i+o11XJRSoDKJqhP8mBgW6bfZGJmVfdT7/0x4h1i\ne0nptbtzkUit6c4ETb0cH4/ERCat6VK5bxt0roNrw4NxkwQXk8ditW48tU88qEL6\n/GKdVdLaZ/iKMhKSkcOhJEFdju38foH6/VdAU7IYLS1Qw06Kf56s6JhSh0pQIEO6\nEH724rECgYEA4CP57g1Tx4npmvRnlS3TcKk7nmCtlIsGruPB/uqG3z1xzZPZxh38\ngNT/wAGY226UC0sIjzUFa6SnV2vrEu9UHc/XQ/km0J8OBhSl9k1zaZJIVtSuZQfe\ntMXMSEzMcSONHNAvyJVQ3rUeGJc9brAoKt0CFUYvwBEKw6e74+5biz0CgYEA7WQ2\n+zf1obLR7wiSMFJi4EIXAx/sCaodQxuyMG30uBMKuMVbmbYuuAAvwUf1NUJTMr6a\n0NEfNfuYDy47RE4bumYWjCGeZGw7YP7E23y5WxlI6U2EYiYCetWbSzLU5uFoY2JZ\nT6odgU1GUeFtnOYwlAYHCHR1xE8nlPx89ITN5XsCgYEA0jCqphSVZl/sU8WyhXDu\nAY6SPBmJbe1aHRO0zur8A8lJOXHXHTTtn5sfIt3cjJqL9nMs2a7tIF7OFus7DQym\nozZPNo0lWyptKkKex/Ulr/DgKZ1U1aWlsXxz77ElX0vpfwW0abOsnMzYJlNd5rkH\nUfrjgzPIf6L7pzNavYq/CjkCgYB3USOBaUMAnwx9hGVV/FLOPOmsHGNbCDHlBQqu\n5NVXn9qHvEqqG7OnsBBQqYZJ2qhOnRbbVgDF9UscdjQ7xLaTHbS/gjZGa0/9FJCF\ncU8IxtCq0tdzLX+ZlbuUNFxmH22EZm5VaD+kOd7aUN/zOI+6Fr16Nm7q2I4giDeV\n/xot+QKBgBcCWRAqiUcTXmsU3QYQqHVrR47oGa/8ZJd9Eyt4vJwaUfK7tmxdNgne\ng+hfVoqItSBDpFZZZo5jV/DjIgOGXnD9q04a3zKd8TFOvOMb01NJUg7L+LycP6bK\n6vdtGu+cDHgCN/dfY9CpadWgREH6AmPEXa8SeT1Pd1kHOY0VqwNw\n-----END RSA PRIVATE KEY-----\n",
+            "ready_for_renewal": false,
+            "set_authority_key_id": false,
+            "set_subject_key_id": false,
+            "subject": [
+              {
+                "common_name": "enterprise.bobkov.local",
+                "country": null,
+                "email_address": null,
+                "locality": null,
+                "organization": "Bobkov DevOps Enterprise",
+                "organizational_unit": null,
+                "postal_code": null,
+                "province": null,
+                "serial_number": null,
+                "street_address": null
+              }
+            ],
+            "uris": null,
+            "validity_end_time": "2027-08-01T19:23:48.356175624+03:00",
+            "validity_period_hours": 8760,
+            "validity_start_time": "2026-08-01T19:23:48.356175624+03:00"
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_pem"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "dependencies": [
+            "tls_private_key.alb_key"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_alb_http_router",
+      "name": "web_router",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-08-01T15:28:39Z",
+            "description": "",
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "ds7qg4na9b809vp65bjp",
+            "labels": {},
+            "name": "enterprise-web-http-router",
+            "route_options": [],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDAsImRlbGV0ZSI6MzAwMDAwMDAwMDAwLCJ1cGRhdGUiOjMwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_alb_load_balancer",
+      "name": "web_balancer",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "allocation_policy": [
+              {
+                "location": [
+                  {
+                    "disable_traffic": false,
+                    "subnet_id": "e9bcch0ej545u5m266q5",
+                    "zone_id": "ru-central1-a"
+                  }
+                ]
+              }
+            ],
+            "allow_zonal_shift": false,
+            "auto_scale_policy": [],
+            "created_at": "2026-08-01T16:23:50Z",
+            "description": "",
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "ds7uo71rpldi1hbpc9df",
+            "labels": {},
+            "listener": [
+              {
+                "endpoint": [
+                  {
+                    "address": [
+                      {
+                        "external_ipv4_address": [
+                          {
+                            "address": "158.160.160.152"
+                          }
+                        ],
+                        "external_ipv6_address": [],
+                        "internal_ipv4_address": []
+                      }
+                    ],
+                    "ports": [
+                      80
+                    ]
+                  }
+                ],
+                "http": [
+                  {
+                    "handler": [
+                      {
+                        "allow_http10": false,
+                        "http2_options": [],
+                        "http_router_id": "ds7qg4na9b809vp65bjp",
+                        "preserve_http1_header_casing": false,
+                        "rewrite_request_id": false
+                      }
+                    ],
+                    "redirects": []
+                  }
+                ],
+                "name": "http-listener",
+                "stream": [],
+                "tls": []
+              },
+              {
+                "endpoint": [
+                  {
+                    "address": [
+                      {
+                        "external_ipv4_address": [
+                          {
+                            "address": "158.160.160.152"
+                          }
+                        ],
+                        "external_ipv6_address": [],
+                        "internal_ipv4_address": []
+                      }
+                    ],
+                    "ports": [
+                      443
+                    ]
+                  }
+                ],
+                "http": [],
+                "name": "https-listener",
+                "stream": [],
+                "tls": [
+                  {
+                    "default_handler": [
+                      {
+                        "certificate_ids": [
+                          "fpqg3ts7d4as72fem3d5"
+                        ],
+                        "client_certificates_verification": [],
+                        "http_handler": [
+                          {
+                            "allow_http10": false,
+                            "http2_options": [],
+                            "http_router_id": "ds7qg4na9b809vp65bjp",
+                            "preserve_http1_header_casing": false,
+                            "rewrite_request_id": false
+                          }
+                        ],
+                        "stream_handler": []
+                      }
+                    ],
+                    "sni_handler": []
+                  }
+                ]
+              }
+            ],
+            "log_group_id": "",
+            "log_options": [],
+            "name": "enterprise-web-balancer-v2",
+            "network_id": "enp3q8tgvc9hols70kdb",
+            "region_id": "",
+            "security_group_ids": [
+              "enpu46f4cfpbpednttcc"
+            ],
+            "status": "starting",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6NjAwMDAwMDAwMDAwLCJ1cGRhdGUiOjYwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "tls_private_key.alb_key",
+            "tls_self_signed_cert.alb_cert",
+            "yandex_alb_http_router.web_router",
+            "yandex_cm_certificate.alb_yandex_cert_v2",
+            "yandex_vpc_network.main_vpc",
+            "yandex_vpc_security_group.bastion_sg",
+            "yandex_vpc_security_group.web_sg",
+            "yandex_vpc_subnet.public_a"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_cm_certificate",
+      "name": "alb_yandex_cert_v2",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "challenges": [],
+            "created_at": "2026-08-01T16:23:49Z",
+            "deletion_protection": false,
+            "description": "",
+            "domains": null,
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "fpqg3ts7d4as72fem3d5",
+            "issued_at": "2026-08-01T16:23:49Z",
+            "issuer": "CN=enterprise.bobkov.local,O=Bobkov DevOps Enterprise",
+            "labels": {},
+            "managed": [],
+            "name": "enterprise-alb-ssl-cert-v2",
+            "not_after": "2027-08-01T16:23:48Z",
+            "not_before": "2026-08-01T16:23:48Z",
+            "self_managed": [
+              {
+                "certificate": "-----BEGIN CERTIFICATE-----\nMIIDSjCCAjKgAwIBAgIRANcf5caEvIN3FkSjVBU8lrUwDQYJKoZIhvcNAQELBQAw\nRTEhMB8GA1UEChMYQm9ia292IERldk9wcyBFbnRlcnByaXNlMSAwHgYDVQQDExdl\nbnRlcnByaXNlLmJvYmtvdi5sb2NhbDAeFw0yNjA4MDExNjIzNDhaFw0yNzA4MDEx\nNjIzNDhaMEUxITAfBgNVBAoTGEJvYmtvdiBEZXZPcHMgRW50ZXJwcmlzZTEgMB4G\nA1UEAxMXZW50ZXJwcmlzZS5ib2Jrb3YubG9jYWwwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQDP2QySjlDSXuMQV2BxuzWLxhn/ZX5Js0CsTPxLIWFlNXr9\nK2gAHYG5Ov6d7zQMHVeKY3r5INHzWp3ya1MwzP+85uGD0HOViwQpXxrHb5I32p8X\nCKO1UENsTXQv3E/KD1oQxGSf56D4kptKE0vWDj6F3KLfk+74HW9Oztdc/Ft3z+V/\nXh3dD8gnYvmvIzwVKzc/S9GCQhm5J1cUgzuD2jhYMFjaVbGV7rpSpaulF4JUmeGo\nmFUjzKKGlik+OsStc/hQ/45Xk4XQaaevSfVR9Dz6jIMx6Fj9EoJEdhFJ6cZ8fM2/\nms3mFOtwX3aqV1OMPvKEXZhwc7MP/uPVf/ldYndPAgMBAAGjNTAzMA4GA1UdDwEB\n/wQEAwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATAMBgNVHRMBAf8EAjAAMA0GCSqG\nSIb3DQEBCwUAA4IBAQA61BYTHeO/vcJ0Wfe9o7r7Dzomcw/aee3PrYmW+fdBas30\n4IVV8jZDk5hMi4DWZHuXIbTlqHwLu0w7UwiMKJMSOS/b/TJYgrRoSJW3RVpVxFF1\nJ9KDIYHdhHcLPYiiAcZzKTe3n+gSb7YzpqT62AzXHVhUUPbD4F1h4wJRO/TPJd/r\nxplzSHolDjy6n+tud8XKCIAbR8zRFEPPY8D2lWatEQYQ8tT105VItWjMdpI9qnWg\nsZkeMhPfHdLB/qB6maeJbqtwVt8OUOnwhOQEgrYq3VfgdPXtqSbXGd/30a5j5smb\n83/JbL1h4RnuGCtdUxWbB/lc+FTKFXf+RA+Z4a0e\n-----END CERTIFICATE-----\n",
+                "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAz9kMko5Q0l7jEFdgcbs1i8YZ/2V+SbNArEz8SyFhZTV6/Sto\nAB2BuTr+ne80DB1XimN6+SDR81qd8mtTMMz/vObhg9BzlYsEKV8ax2+SN9qfFwij\ntVBDbE10L9xPyg9aEMRkn+eg+JKbShNL1g4+hdyi35Pu+B1vTs7XXPxbd8/lf14d\n3Q/IJ2L5ryM8FSs3P0vRgkIZuSdXFIM7g9o4WDBY2lWxle66UqWrpReCVJnhqJhV\nI8yihpYpPjrErXP4UP+OV5OF0Gmnr0n1UfQ8+oyDMehY/RKCRHYRSenGfHzNv5rN\n5hTrcF92qldTjD7yhF2YcHOzD/7j1X/5XWJ3TwIDAQABAoIBACQvs8KoSGX34yxr\nKf1jDJWDLe+LKguGy9GzrZEfBKfsQbdmITsz5+vp235/sN4TFbSgUT6ieisWMb2M\n9fTfG/81aznZxuXYSCczyaPDRv+2blBCTs44ZSSr73iNsM6LEbEtoB8+4oWkcKja\n5y8jV7tSiIDIbqh/52sfE9u6i+o11XJRSoDKJqhP8mBgW6bfZGJmVfdT7/0x4h1i\ne0nptbtzkUit6c4ETb0cH4/ERCat6VK5bxt0roNrw4NxkwQXk8ditW48tU88qEL6\n/GKdVdLaZ/iKMhKSkcOhJEFdju38foH6/VdAU7IYLS1Qw06Kf56s6JhSh0pQIEO6\nEH724rECgYEA4CP57g1Tx4npmvRnlS3TcKk7nmCtlIsGruPB/uqG3z1xzZPZxh38\ngNT/wAGY226UC0sIjzUFa6SnV2vrEu9UHc/XQ/km0J8OBhSl9k1zaZJIVtSuZQfe\ntMXMSEzMcSONHNAvyJVQ3rUeGJc9brAoKt0CFUYvwBEKw6e74+5biz0CgYEA7WQ2\n+zf1obLR7wiSMFJi4EIXAx/sCaodQxuyMG30uBMKuMVbmbYuuAAvwUf1NUJTMr6a\n0NEfNfuYDy47RE4bumYWjCGeZGw7YP7E23y5WxlI6U2EYiYCetWbSzLU5uFoY2JZ\nT6odgU1GUeFtnOYwlAYHCHR1xE8nlPx89ITN5XsCgYEA0jCqphSVZl/sU8WyhXDu\nAY6SPBmJbe1aHRO0zur8A8lJOXHXHTTtn5sfIt3cjJqL9nMs2a7tIF7OFus7DQym\nozZPNo0lWyptKkKex/Ulr/DgKZ1U1aWlsXxz77ElX0vpfwW0abOsnMzYJlNd5rkH\nUfrjgzPIf6L7pzNavYq/CjkCgYB3USOBaUMAnwx9hGVV/FLOPOmsHGNbCDHlBQqu\n5NVXn9qHvEqqG7OnsBBQqYZJ2qhOnRbbVgDF9UscdjQ7xLaTHbS/gjZGa0/9FJCF\ncU8IxtCq0tdzLX+ZlbuUNFxmH22EZm5VaD+kOd7aUN/zOI+6Fr16Nm7q2I4giDeV\n/xot+QKBgBcCWRAqiUcTXmsU3QYQqHVrR47oGa/8ZJd9Eyt4vJwaUfK7tmxdNgne\ng+hfVoqItSBDpFZZZo5jV/DjIgOGXnD9q04a3zKd8TFOvOMb01NJUg7L+LycP6bK\n6vdtGu+cDHgCN/dfY9CpadWgREH6AmPEXa8SeT1Pd1kHOY0VqwNw\n-----END RSA PRIVATE KEY-----\n",
+                "private_key_lockbox_secret": []
+              }
+            ],
+            "serial": "d71fe5c684bc83771644a354153c96b5",
+            "status": "ISSUED",
+            "subject": "CN=enterprise.bobkov.local,O=Bobkov DevOps Enterprise",
+            "timeouts": null,
+            "type": "IMPORTED",
+            "updated_at": "2026-08-01T16:23:49Z"
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "self_managed"
+              },
+              {
+                "type": "index",
+                "value": {
+                  "value": 0,
+                  "type": "number"
+                }
+              },
+              {
+                "type": "get_attr",
+                "value": "private_key"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMCwiZGVsZXRlIjo2MDAwMDAwMDAwMCwicmVhZCI6NjAwMDAwMDAwMDAsInVwZGF0ZSI6NjAwMDAwMDAwMDB9LCJzY2hlbWFfdmVyc2lvbiI6IjEifQ==",
+          "dependencies": [
+            "tls_private_key.alb_key",
+            "tls_self_signed_cert.alb_cert"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_network",
+      "name": "main_vpc",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-08-01T15:28:39Z",
+            "default_security_group_id": "enpmj3hhq6k6v40ragj7",
+            "description": "",
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "enp3q8tgvc9hols70kdb",
+            "labels": {},
+            "name": "enterprise-main-vpc",
+            "subnet_ids": [
+              "e2ljvntirmslmg3sentc",
+              "e9bcch0ej545u5m266q5",
+              "e9blo011s2fr0q5srbgj"
+            ],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMCwiZGVsZXRlIjo2MDAwMDAwMDAwMCwidXBkYXRlIjo2MDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_security_group",
+      "name": "bastion_sg",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-08-01T16:23:54Z",
+            "description": "",
+            "egress": [
+              {
+                "description": "Allow all outbound traffic",
+                "from_port": 0,
+                "id": "enpfbcc0unfitplsgr9o",
+                "labels": {},
+                "port": -1,
+                "predefined_target": "",
+                "protocol": "ANY",
+                "security_group_id": "",
+                "to_port": 65535,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              }
+            ],
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "enpgndg25n9kjbfalpnf",
+            "ingress": [
+              {
+                "description": "Allow SSH management to Bastion from anywhere",
+                "from_port": -1,
+                "id": "enpqgg48u8ll8dr4pk44",
+                "labels": {},
+                "port": 22,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              }
+            ],
+            "labels": {},
+            "name": "enterprise-bastion-sg",
+            "network_id": "enp3q8tgvc9hols70kdb",
+            "status": "ACTIVE",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAsImRlbGV0ZSI6MTgwMDAwMDAwMDAwLCJ1cGRhdGUiOjE4MDAwMDAwMDAwMH19",
+          "dependencies": [
+            "yandex_vpc_network.main_vpc"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_security_group",
+      "name": "web_sg",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-08-01T15:28:44Z",
+            "description": "",
+            "egress": [
+              {
+                "description": "Allow all outbound traffic",
+                "from_port": 0,
+                "id": "enp7ua9pcbtqov503e5i",
+                "labels": {},
+                "port": -1,
+                "predefined_target": "",
+                "protocol": "ANY",
+                "security_group_id": "",
+                "to_port": 65535,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              }
+            ],
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "enpu46f4cfpbpednttcc",
+            "ingress": [
+              {
+                "description": "Allow ALB internal traffic and healthchecks to Web Nodes",
+                "from_port": -1,
+                "id": "enpvmk2loq6hfcro42dc",
+                "labels": {},
+                "port": 80,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "10.100.0.0/16"
+                ],
+                "v6_cidr_blocks": []
+              },
+              {
+                "description": "Allow SSH management to web nodes from Bastion",
+                "from_port": -1,
+                "id": "enp9v4ekm65a32vi2gn5",
+                "labels": {},
+                "port": 22,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "enpgndg25n9kjbfalpnf",
+                "to_port": -1,
+                "v4_cidr_blocks": [],
+                "v6_cidr_blocks": []
+              },
+              {
+                "description": "Allow classic HTTP web traffic from internet to ALB",
+                "from_port": -1,
+                "id": "enpl5s172prcub8nsvao",
+                "labels": {},
+                "port": 80,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              },
+              {
+                "description": "Allow metrics scraping from Prometheus server node",
+                "from_port": 9100,
+                "id": "enptkqj3c05814ja42t5",
+                "labels": {},
+                "port": -1,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": 9113,
+                "v4_cidr_blocks": [
+                  "10.100.0.0/16"
+                ],
+                "v6_cidr_blocks": []
+              },
+              {
+                "description": "Allow secure HTTPS traffic termination from internet to ALB",
+                "from_port": -1,
+                "id": "enpi03gkfsohp15hol5f",
+                "labels": {},
+                "port": 443,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              }
+            ],
+            "labels": {},
+            "name": "enterprise-web-nodes-sg",
+            "network_id": "enp3q8tgvc9hols70kdb",
+            "status": "ACTIVE",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAsImRlbGV0ZSI6MTgwMDAwMDAwMDAwLCJ1cGRhdGUiOjE4MDAwMDAwMDAwMH19",
+          "dependencies": [
+            "yandex_vpc_network.main_vpc",
+            "yandex_vpc_security_group.bastion_sg"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_subnet",
+      "name": "public_a",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-08-01T15:28:41Z",
+            "description": "",
+            "dhcp_options": [],
+            "folder_id": "b1gfnin5k6cbrnbsamn0",
+            "id": "e9bcch0ej545u5m266q5",
+            "labels": {},
+            "name": "enterprise-public-subnet-a",
+            "network_id": "enp3q8tgvc9hols70kdb",
+            "route_table_id": "",
+            "timeouts": null,
+            "v4_cidr_blocks": [
+              "10.100.10.0/24"
+            ],
+            "v6_cidr_blocks": [],
+            "zone": "ru-central1-a"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAsImRlbGV0ZSI6MTgwMDAwMDAwMDAwLCJ1cGRhdGUiOjE4MDAwMDAwMDAwMH19",
+          "dependencies": [
+            "yandex_vpc_network.main_vpc"
+          ]
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}

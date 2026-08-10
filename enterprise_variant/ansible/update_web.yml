@@ -1,32 +1,219 @@
 ---
-- name: Nastrojka processora Nginx PHP i sbornika metrik dlya Debian 13
-  hosts: webservers
-  become: yes
+- name: "Configure Scalable Web Nodes Backend Stack"
+  hosts: all
+  become: true
+  vars:
+    # Безопасный атомарный вынос адреса для защиты от урезок и сокращений строк
+    local_loopback_ip: "127.0.0.1"
+    nginx_status_path: "nginx_status"
+    nginx_scrape_endpoint: "http://{{ local_loopback_ip }}:80/{{ nginx_status_path }}"
+
   tasks:
-    - name: Proverka aktivnosti i zapusk sistemnogo demona PHP8.4-FPM
-      systemd:
-        name: php8.4-fpm
-        state: started
-        enabled: yes
-
-    - name: Udalenie ostatkov zavodskoj staticheskoj zaglushi index.html
-      file:
-        path: /var/www/html/index.html
-        state: absent
-
-    - name: Ustanovka oficialnogo agenta metrik Prometheus Node Exporter
-      apt:
-        name: prometheus-node-exporter
+    # 1. Установка ядра Docker на чистую Debian 13 после дестроя
+    - name: "Install Docker Core Packages from Debian 13 Main Repository"
+      ansible.builtin.apt:
+        name: [docker.io, python3-docker, jq]
         state: present
         update_cache: yes
 
-    - name: Dobavlenie Node Exporter v avtozagruzku OS i prinuditelnyj zapusk
-      systemd:
-        name: prometheus-node-exporter
+    # 2. НАСТРОЙКА И КОНФИГУРАЦИЯ ВЕБ-СЕРВЕРА NGINX
+    - name: "Install Nginx from Debian 13 Repository"
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+
+    - name: "Deploy Enterprise Nginx Configuration with stub_status profile"
+      ansible.builtin.copy:
+        dest: "/etc/nginx/nginx.conf"
+        content: |
+          user www-data;
+          worker_processes auto;
+          pid /run/nginx.pid;
+          include /etc/nginx/modules-enabled/*.conf;
+
+          events {
+              worker_connections 768;
+          }
+
+          http {
+              sendfile on;
+              tcp_nopush on;
+              types_hash_max_size 2048;
+              include /etc/nginx/mime.types;
+              default_type application/octet-stream;
+
+              access_log /var/log/nginx/access.log;
+              error_log /var/log/nginx/error.log;
+
+              gzip on;
+
+              server {
+                  listen 80 default_server;
+                  listen [::]:80 default_server;
+
+                  root /var/www/html;
+                  index index.php index.html index.htm;
+
+                  server_name _;
+
+                  location / {
+                      try_files $uri $uri/ =404;
+                  }
+
+                  location ~ \.php$ {
+                      include snippets/fastcgi-php.conf;
+                      fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+                  }
+
+                  # Открываем страницу статистики для локального экспортера
+                  location /{{ nginx_status_path }} {
+                      stub_status on;
+                      access_log off;
+                      allow {{ local_loopback_ip }};
+                      deny all;
+                  }
+              }
+          }
+        mode: '0644'
+
+    - name: "Install PHP 8.4 Core Components for Rocket Landing"
+      ansible.builtin.apt:
+        name: [php8.4-fpm, php8.4-cli]
+        state: present
+
+    - name: "Ensure PHP-FPM and Nginx are started and enabled"
+      ansible.builtin.service:
+        name: "{{ item }}"
         state: restarted
         enabled: yes
+      loop:
+        - "php8.4-fpm"
+        - "nginx"
 
-    - name: Perezapusk osnovnogo veb-servera Nginx dlya primeneniya nastrojek
-      systemd:
-        name: nginx
-        state: restarted
+    # 3. КОПИРОВАНИЕ КУРСОВОГО САЙТА С ХАРАКТЕРИСТИКАМИ И ФАМИЛИЕЙ СТУДЕНТА
+    - name: "Create default web root directory"
+      ansible.builtin.file:
+        path: /var/www/html
+        state: directory
+        mode: '0755'
+
+    - name: "Deploy Index Rocket Landing Code"
+      ansible.builtin.copy:
+        dest: "/var/www/html/index.php"
+        content: |
+          <?php
+          header('Content-Type: text/html; charset=utf-8');
+          
+          // Вытаскиваем человеческое имя ноды, переданное из Ansible, и внутренний IP
+          $node_name = "{{ inventory_hostname }}"; 
+          $internal_ip = $_SERVER['SERVER_ADDR'];
+
+          // Считываем реальные характеристики сервера напрямую из файлов Linux
+          $cpu_info = shell_exec("grep -m 1 'model name' /proc/cpuinfo | cut -d: -f2");
+          $mem_info = shell_exec("grep 'MemTotal' /proc/meminfo | awk '{print $2}'");
+          $mem_gb = round($mem_info / 1024 / 1024, 1);
+          ?>
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Курсовой проект - Бобков А.К.</title>
+              <style>
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      text-align: center;
+                      padding-top: 6%;
+                      background: #1a1a2e;
+                      color: #fff;
+                  }
+                  .container {
+                      display: inline-block;
+                      padding: 40px;
+                      background: #16162a;
+                      border-radius: 15px;
+                      border: 1px solid rgba(233, 69, 96, 0.4);
+                      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                  }
+                  h1 {
+                      color: #e94560;
+                      font-size: 2.2em;
+                      text-transform: uppercase;
+                      letter-spacing: 1px;
+                      margin-bottom: 5px;
+                  }
+                  .student-name {
+                      color: #64ffda;
+                      font-size: 1.2em;
+                      margin-bottom: 30px;
+                      letter-spacing: 1px;
+                  }
+                  h2 {
+                      font-weight: 300;
+                      color: #8892b0;
+                      font-size: 1.3em;
+                  }
+                  .node-badge {
+                      color: #4ecc71;
+                      font-weight: bold;
+                      background: rgba(78, 204, 113, 0.1);
+                      padding: 4px 12px;
+                      border-radius: 20px;
+                      border: 1px solid rgba(78, 204, 113, 0.3);
+                  }
+                  .specs-box {
+                      background: #0f0f1a;
+                      border: 1px solid rgba(255,255,255,0.1);
+                      padding: 20px;
+                      border-radius: 8px;
+                      text-align: left;
+                      margin-top: 25px;
+                      font-size: 0.95em;
+                  }
+                  .specs-box p {
+                      margin: 8px 0;
+                  }
+                  .specs-box b {
+                      color: #8892b0;
+                  }
+                  .footer-text {
+                      color: #64ffda;
+                      margin-top: 30px;
+                      font-size: 0.85em;
+                      opacity: 0.8;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🚀 Все работает Enterprise вариант!</h1>
+                  <div class="student-name">Выполнил студент: <b>Бобков А.К.</b></div>
+                  
+                  <h2>Текущая активная нода бэкенда: <span class="node-badge"><?php echo htmlspecialchars($node_name); ?></span></h2>
+                  
+                  <div class="specs-box">
+                      <p><b>Внутренний IP-адрес:</b> <span style="color: #4ecc71;"><?php echo $internal_ip; ?></span></p>
+                      <p><b>Процессор (CPU):</b> <?php echo htmlspecialchars(trim($cpu_info)); ?></p>
+                      <p><b>Оперативная память (RAM):</b> <?php echo $mem_gb; ?> ГБ</p>
+                  </div>
+                  
+                  <p class="footer-text">Трафик успешно сбалансирован через Yandex Application Load Balancer.</p>
+              </div>
+          </body>
+          </html>
+        mode: '0644'
+
+    # 4. ОРКЕСТРАЦИЯ КОНТЕЙНЕРОВ СБОРА МЕТРИК НА ВЕБ-НОДАХ
+    - name: "Launch Node Exporter Container on Web Nodes"
+      community.docker.docker_container:
+        name: node-exporter
+        image: "prom/node-exporter:v1.6.1"
+        restart_policy: always
+        network_mode: host
+
+    - name: "Launch Nginx Prometheus Exporter Container"
+      community.docker.docker_container:
+        name: nginx-exporter
+        image: "nginx/nginx-prometheus-exporter:latest"
+        restart_policy: always
+        network_mode: host
+        command:
+          - "-nginx.scrape-uri={{ nginx_scrape_endpoint }}"
