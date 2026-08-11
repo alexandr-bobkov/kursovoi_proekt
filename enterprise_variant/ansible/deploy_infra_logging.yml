@@ -26,7 +26,7 @@
         state: "started"
         enabled: yes
 
-    # 2. ПОДГОТОВКА ДИРЕКТОРИЙ ОВНЕРСТВА
+    # 2. ПОДГОТОВКА ДИРЕКТОРИЙ 
     - name: "Create PostgreSQL home directory"
       ansible.builtin.file:
         path: "{{ postgres_work_dir }}"
@@ -55,7 +55,7 @@
         name: "postgres:15-alpine"
         source: pull
 
-    # 4. ГЕНЕРАЦИЯ КОНФИГУРАЦИЙ DOCKER-COMPOSE И ФАЙЛОВ ПОД ТЗ
+    # 4. ГЕНЕРАЦИЯ КОНФИГУРАЦИЙ DOCKER-COMPOSE И ФАЙЛОВ
     - name: "Write Docker-Compose for Production PostgreSQL Cluster"
       ansible.builtin.copy:
         dest: "{{ postgres_work_dir }}/docker-compose.yml"
@@ -108,20 +108,20 @@
           filebeat.inputs:
             - type: container
               paths:
-                # ВЫПОЛНЕНИЕ ТЗ: Автоматически перехватываем логи Elasticsearch, Kibana, Prometheus и Grafana
+                # Автоматически перехватываем логи Elasticsearch, Kibana, Prometheus и Grafana
                 - '/var/lib/docker/containers/*/*.log'
               processors:
                 - add_docker_metadata:
                     host: "unix:///var/run/docker.sock"
 
           output.elasticsearch:
-            # АВТОМАТИЗАЦИЯ: Направляем потоки логов строго на динамический IP хоста СУБД
+            # Направляем потоки логов строго на динамический IP хоста СУБД
             hosts: ["http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
             worker: 1
 
           logging.level: info
 
-    # 5. ОРКЕСТРАЦИЯ И ЗАПУСК СЕРВИСОВ АВТОПИЛОТОМ
+    # 5. ОРКЕСТРАЦИЯ И ЗАПУСК СЕРВИСОВ АВТОматически
     - name: "Launch Production PostgreSQL Cluster"
       community.docker.docker_compose_v2:
         project_src: "{{ postgres_work_dir }}"

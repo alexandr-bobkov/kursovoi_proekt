@@ -102,20 +102,20 @@
             fields:
               type: nginx-logs
             fields_under_root: true
-            # ИСПРАВЛЕНО: Отключаем автоматический дата-стрим на уровне инпута
+            # Отключаем автоматический дата-стрим на уровне инпута
             data_stream.enabled: false
 
-          # ИСПРАВЛЕНО: Явно отключаем политику ILM, чтобы Elastic разрешил кастомные индексы
+          # Отключаем политику ILM, чтобы Elastic разрешил кастомные индексы
           setup.ilm.enabled: false
           setup.template.name: "nginx-logs"
           setup.template.pattern: "nginx-logs-*"
 
           output.elasticsearch:
             hosts: ["http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
-            # СВЯЗКА ПО ИБ: Оставляем авторизацию, если в будущем включите X-Pack
+            # Оставляем авторизацию, если в будущем включите X-Pack
             username: "elastic"
             password: "BobkovElasticSecure2026"
-            # ИСПРАВЛЕНО: Форсируем запись строго в наш именной индекс с маской даты курсовой
+            # Форсируем запись строго в наш именной индекс с маской даты курсовой
             index: "nginx-logs-%{+yyyy.MM.dd}"
             
           logging.level: error

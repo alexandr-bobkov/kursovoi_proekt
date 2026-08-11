@@ -24,14 +24,14 @@ GRAFANA_IP=$(grep -A1 '\[grafana_host\]' hosts.ini | grep -oP 'ansible_host=\K[0
 echo "=== [DevOps Auto-Pilot] Current working directory changed to: $(pwd) ==="
 echo "=== [DevOps Auto-Pilot] Scanning cloud network topology... ==="
 
-# 1. Сначала железно дожидаемся готовности самого Бастиона наружу
+# 1. Сначала  дожидаемся готовности самого Бастиона наружу
 while ! nc -z -w3 "$BASTION_IP" 22; do
   echo "--> Waiting for Bastion Gateway (${BASTION_IP}:22) to respond..."
   sleep 4
 done
 echo "=== [SUCCESS] Bastion is online! Testing internal private perimeter via secure tunnel... ==="
 
-# 2. АВТОМАТИЗАЦИЯ: Проверяем порты внутренних нод РУКАМИ БАСТИОНА через SSH-прыжок
+# 2. Проверяем порты внутренних нод РУКАМИ БАСТИОНА через SSH-прыжок
 for HOST_IP in "$ELASTIC_IP" "$KIBANA_IP" "$GRAFANA_IP"; do
   while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_ed25519 -q debian@$BASTION_IP "nc -z -w3 $HOST_IP 22"; do
     echo "--> Internal node ${HOST_IP}:22 is still warming up inside VPC. Retrying via Bastion..."
@@ -55,10 +55,10 @@ if [ $? -ne 0 ]; then echo "Step 2 (Logging Infrastructure) Failed!"; exit 1; fi
 ansible-playbook -i hosts.ini update_web.yml --limit 'all:!bastion_host'
 if [ $? -ne 0 ]; then echo "Step 3 (Web Nodes) Failed!"; exit 1; fi
 
-# ШАГ 4: В самом конце включаем стек аналитики Grafana, Prometheus и Go-адаптер CrunchyData
+# ШАГ 4: В конце включаем стек аналитики Grafana, Prometheus и Go-адаптер CrunchyData
 ansible-playbook -i hosts.ini deploy_grafana.yml --limit 'all:!bastion_host'
 if [ $? -ne 0 ]; then echo "Step 4 (Grafana) Failed!"; exit 1; fi
 
 echo "=============================================================================="
-echo "=== TRIUMF: VSYA INFRASTRUKTURA BOBKOVA RAZVERNUTA AVTOMATOM NA 100%! ==="
+echo "=== ИФРАСТРУКТУРА РАЗВЕРНУТА НА 100%! ==="
 echo "=============================================================================="

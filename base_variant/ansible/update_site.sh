@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# СТРАТЕГИЧЕСКИЙ ПОРЯДОК ДЕПЛОЯ С ПОЛНОГО НУЛЯ
+# ПОРЯДОК ДЕПЛОЯ С ПОЛНОГО НУЛЯ
 echo "=== [1/5] Настройка Бастиона и базового веб-стека Nginx ==="
 ansible-playbook -i hosts.ini playbook.yml
 
@@ -20,7 +20,7 @@ ansible-playbook -i hosts.ini deploy_grafana.yml
 
 echo "=== [5/5] Обновление динамического контента веб-серверов ==="
 
-# ДИНАМИЧЕСКИЙ ВЫБОР IP ИЗ HOSTS.INI НА ЛЕТУ Без хардкода!
+# ДИНАМИЧЕСКИЙ ВЫБОР IP ИЗ HOSTS.INI 
 BASTION_IP=$(ansible-inventory -i hosts.ini --host bastion_host | grep -oP '"ansible_host": "\K[^"]+')
 WEB1_IP=$(ansible-inventory -i hosts.ini --host web1 | grep -oP '"ansible_host": "\K[^"]+')
 WEB2_IP=$(ansible-inventory -i hosts.ini --host web2 | grep -oP '"ansible_host": "\K[^"]+')
@@ -29,7 +29,7 @@ echo "Определен актуальный IP Бастиона: ${BASTION_IP}
 echo "Определен актуальный IP WEB1: ${WEB1_IP}"
 echo "Определен актуальный IP WEB2: ${WEB2_IP}"
 
-# 1. Обновляем сайт на первом сервере (web1) через динамический IP Бастиона (без интерактивных вопросов!)
+# 1. Обновляем сайт на первом сервере (web1) через динамический IP Бастиона)
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -J debian@${BASTION_IP} debian@${WEB1_IP} << EOF_SSH
 sudo mkdir -p /var/www/html
 sudo chown -R debian:debian /var/www/html
@@ -63,7 +63,7 @@ sudo tee /var/www/html/index.php > /dev/null << EOF_SITE
         <h1>Курсовой проект по DevOps</h1>
         <div class="author">Студент: Бобков А.К.</div>
         
-        <p>Vysokoaktivnaya sbalansirovannaya infrastruktura uspeshno rabotaet v Yandex Cloud.</p>
+        <p>Инфпаструктура работает в  Yandex Cloud.</p>
         
         <div class="status-box">
             <div class="status-line">Активный сервер обработки: <span class="badge">WEB1</span></div>
@@ -121,7 +121,7 @@ sudo tee /var/www/html/index.php > /dev/null << EOF_SITE
         <h1>Курсовой проект по DevOps</h1>
         <div class="author">Студент: Бобков А.К.</div>
         
-        <p>Vysokoaktivnaya sbalansirovannaya infrastruktura uspeshno rabotaet v Yandex Cloud.</p>
+        <p>Инфпаструктура работает в  Yandex Cloud.</p>
         
         <div class="status-box">
             <div class="status-line">Активный ... обработки: <span class="badge">WEB2</span></div>
@@ -145,4 +145,4 @@ EOF_SITE
 sudo ln -sf /var/www/html/index.php /var/www/html/index.html
 EOF_SSH
 
-echo "Вся инфраструктура и сайт успешно переведены на оригинальный динамический режим работы!"
+echo "Вся инфраструктура и сайт успешно переведены на  динамический режим работы!"

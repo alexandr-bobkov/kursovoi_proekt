@@ -127,7 +127,7 @@ resource "yandex_vpc_security_group" "kibana_sg" {
   ingress {
     protocol       = "TCP"
     description    = "Allow SSH management from local cloud network"
-    v4_cidr_blocks = ["10.0.0.0/16"] # ОТКРЫЛИ СКВОЗНОЙ ТУННЕЛЬ ВНУТРИ ОБЛАКА
+    v4_cidr_blocks = ["10.0.0.0/16"] # ОТКРЫЛ СКВОЗНОЙ ТУННЕЛЬ ВНУТРИ ОБЛАКА
     port           = 22
   }
   egress {
@@ -136,7 +136,7 @@ resource "yandex_vpc_security_group" "kibana_sg" {
   }
 }
 
-# 5. Группа Веб-серверов бэкенда (ВКЛЮЧИЛИ ЖЕЛЕЗНЫЙ ВНУТРЕННИЙ ОПРОС ПОДСЕТИ)
+# 5. Группа Веб-серверов бэкенда 
 resource "yandex_vpc_security_group" "web_sg" {
   name       = "web-servers-security-group"
   network_id = yandex_vpc_network.main_vpc.id
@@ -172,7 +172,7 @@ resource "yandex_vpc_security_group" "web_sg" {
   }
 }
 
-# 6. Группа Внутренней Инфраструктуры Управления (Исправленная и безопасная)
+# 6. Группа Внутренней Инфраструктуры Управления 
 resource "yandex_vpc_security_group" "internal_mgmt_sg" {
   name       = "internal-management-security-group"
   network_id = yandex_vpc_network.main_vpc.id
@@ -196,7 +196,7 @@ resource "yandex_vpc_security_group" "internal_mgmt_sg" {
   ingress {
     protocol       = "TCP"
     description    = "Allow internal cloud network to query Prometheus metrics port"
-    v4_cidr_blocks = ["10.0.0.0/16"] # Исправлено на сквозное внутреннее доверие
+    v4_cidr_blocks = ["10.0.0.0/16"] # сквозное внутреннее доверие
     port           = 9090
   }
 

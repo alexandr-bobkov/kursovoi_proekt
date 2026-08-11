@@ -38,7 +38,7 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru" #открытый ключ
 EOT
   }
 }
@@ -79,7 +79,7 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
 EOT
   }
 }
@@ -107,7 +107,7 @@ resource "yandex_compute_instance" "kibana_server" {
 
   network_interface {
     subnet_id          = yandex_vpc_subnet.public_a.id
-    nat                = true # Разрешаем внешний IP для проверки преподавателем
+    nat                = true # Разрешаем внешний IP для проверки
     security_group_ids = [yandex_vpc_security_group.kibana_sg.id]
   }
 
@@ -120,7 +120,7 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
 EOT
   }
 }
@@ -161,7 +161,7 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
 EOT
   }
 }
@@ -190,7 +190,7 @@ resource "yandex_compute_instance_group" "web_group" {
     resources {
       cores         = 2
       memory        = 2
-      core_fraction = 100 # Гарантия процессора 100% для легитимного автоскейлинга по CPU
+      core_fraction = 100 # Гарантия процессора 100% для легитимного  по CPU
     }
 
     boot_disk {
@@ -216,7 +216,7 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW sanya8517@yandex.ru"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
 EOT
     }
   }
@@ -250,7 +250,7 @@ EOT
 }
 
 # ==============================================================================
-# 6. АВТОГЕНЕРАЦИЯ ИНВЕНТАРЯ ANSIBLE (ИТОГОВАЯ ИСПРАВЛЕННАЯ СБОРКА)
+# 6. АВТОГЕНЕРАЦИЯ ИНВЕНТАРЯ ANSIBLE 
 # ==============================================================================
 resource "local_file" "ansible_inventory" {
   filename = "${path.module}/../ansible/hosts.ini"
@@ -273,7 +273,7 @@ web-node-${index} ansible_host=${instance.network_interface.0.ip_address} ansibl
 %{ endfor ~}
 
 [all:vars]
-# Фиксируем верный тип приватного ключа
+# Фиксируем верный  приватный ключ
 ansible_ssh_private_key_file="~/.ssh/id_ed25519"
 
 [internal:children]

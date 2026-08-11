@@ -121,7 +121,7 @@ resource "yandex_vpc_security_group" "kibana_sg" {
   ingress {
     protocol       = "TCP"
     description    = "Allow Kibana Web UI for global inspection"
-    v4_cidr_blocks = ["0.0.0.0/0"] 
+    v4_cidr_blocks = ["0.0.0.0/0"] # разрешаем подключение с любого внешнего ip можно указать конкретный адрес
     port           = 5601
   }
   ingress {

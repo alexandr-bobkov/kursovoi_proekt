@@ -1,5 +1,5 @@
 # ==============================================================================
-# КОНФИГУРАЦИЯ APPLICATION LOAD BALANCER (L7) — СТРОГО HTTPS (ПОРТ 443)
+# КОНФИГУРАЦИЯ APPLICATION LOAD BALANCER (L7) —  HTTPS (ПОРТ 443)
 # ==============================================================================
 
 # 1. СТАТИЧЕСКИЙ ВНЕШНИЙ IP-АДРЕС ДЛЯ БАЛАНСИРОВЩИКА
@@ -107,7 +107,7 @@ resource "yandex_alb_load_balancer" "web_balancer" {
   }
 }
 
-# ДАННЫЕ СЕРТИФИКАТА: Подтягиваем ваш рабочий SSL-сертификат из Yandex Cloud
+# ДАННЫЕ СЕРТИФИКАТА: Подтягиваем мой рабочий SSL-сертификат из Yandex Cloud
 data "yandex_cm_certificate" "ssl_cert" {
-  name = "enterprise-alb-ssl-cert-v2" # Настоящее имя с вашего скриншота
+  name = "enterprise-alb-ssl-cert-v2" # Имя из панели Yandex Cloud
 }

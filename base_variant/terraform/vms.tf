@@ -1,5 +1,5 @@
 # ==============================================================================
-# КОНФИГУРАЦИЯ ВИРТУАЛЬНЫХ МАШИН ДЛЯ КУРСОВОГО ПРОЕКТА (BASE VARIANT)
+# КОНФИГУРАЦИЯ ВИРТУАЛЬНЫХ МАШИН  (BASE VARIANT)
 # ==============================================================================
 
 # --- ДИНАМИЧЕСКИЙ СБОР ОБРАЗА DEBIAN 13 ИЗ МАРКЕТПЛЕЙСА ---
@@ -31,7 +31,7 @@ resource "yandex_compute_instance" "bastion" {
     subnet_id          = yandex_vpc_subnet.public_a.id
     nat                = true
     
-    # ИСПРАВЛЕНО layout ИБ: привязали Бастион к внешнему и внутреннему периметрам одновременно
+    # Привязали Бастион к внешнему и внутреннему периметрам одновременно
     security_group_ids = [
       yandex_vpc_security_group.bastion_sg.id,
       yandex_vpc_security_group.internal_mgmt_sg.id
@@ -246,7 +246,7 @@ resource "null_resource" "ansible_auto_run" {
     yandex_compute_instance.opensearch
   ]
 
-    # Шаг А: Создание hosts.ini (Исправленный чистый автомат Бобкова A.K.)
+    # Шаг А: Создание hosts.ini 
   provisioner "local-exec" {
     command = <<EOT
 cat <<EOF > ../ansible/hosts.ini
@@ -310,7 +310,7 @@ until ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/
 until ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_rsa -o ProxyJump="debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}" debian@$KIBANA_IP "echo 'Kibana is alive'" 2>/dev/null; do sleep 5; done
 
 echo "Все приватные ноды синхронизированы! Запускаем комплексный деплой всех сервисов..."
-# Финальный накат логов и мониторинга выводится в реальном времени на лету!
+# Финальный накат логов и мониторинга выводится в реальном времени!
 ./update_site.sh 2>&1 | tee /tmp/ansible_site_apply.log
 EOT
   }

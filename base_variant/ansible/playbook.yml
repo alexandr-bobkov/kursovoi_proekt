@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# АВТОМАТИЧЕСКАЯ НАСТРОЙКА БАСТИОНА (РЕШЕНИЕ НАВСЕГДА ПРИ ЛЮБЫХ ПЕРЕЗАПУСКАХ)
+# АВТОМАТИЧЕСКАЯ НАСТРОЙКА БАСТИОНА 
 # ==============================================================================
 - name: Ensure SSH TCP Forwarding is permanently enabled on Bastion
   hosts: bastion
@@ -126,7 +126,7 @@
         group: www-data
         mode: '0644'
 
-    - name: Prinyaditelnoe udalenie staroi zavisloi zaglushki index.html
+    - name: Prinyaditelnoe udalenie staroi  zaglushki index.html
       file:
         path: /var/www/html/index.html
         state: absent

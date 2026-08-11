@@ -90,7 +90,7 @@
         - "php8.4-fpm"
         - "nginx"
 
-    # 3. КОПИРОВАНИЕ КУРСОВОГО САЙТА С ХАРАКТЕРИСТИКАМИ И ФАМИЛИЕЙ СТУДЕНТА
+    # 3. КОПИРОВАНИЕ САЙТА С ХАРАКТЕРИСТИКАМИ И МОЕЙ ФАМИЛИЕЙ
     - name: "Create default web root directory"
       ansible.builtin.file:
         path: /var/www/html
