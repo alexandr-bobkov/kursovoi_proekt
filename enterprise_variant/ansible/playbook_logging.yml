@@ -1,135 +1,71 @@
 ---
 # ==============================================================================
-# РАЗВЕРТЫВАНИЕ И НАСТРОЙКА ELASTICSEARCH С АВТОРИЗАЦИЕЙ
+# 1. ДЕПЛОЙ СЕКЦИИ ХРАНЕНИЯ ЛОГОВ ELASTICSEARCH ПОД DEBIAN 13 (TRIXIE)
 # ==============================================================================
-- name: Deploy and Configure Elasticsearch Container
-  hosts: logging_storage
+- name: "Deploy Unified Elastic Stack v8.11.3"
+  # Ставим Docker сразу на все три управляющие машины контура
+  hosts: logging_storage:kibana_host:grafana_host
   become: true
+  gather_facts: true
   vars:
     elastic_version: "8.11.3"
-    elastic_work_dir: "/opt/elastic-stack"
+    stack_work_dir: "/opt/elastic-stack"
+
   tasks:
-    - name: Install system dependencies for Docker
-      apt:
+    # 1. УКАЗЫВАЕМ ТОЧНЫЕ КОРРЕКТНЫЕ ИМЕНА ПАКЕТОВ ДЛЯ DEBIAN 13
+    - name: "Install Native Docker Engine and Utilities for Debian 13"
+      ansible.builtin.apt:
         name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - lsb-release
+          - docker.io
+          - docker-buildx
+          - docker-compose  # Нативное Enterprise-имя пакета в Debian 13
+          - python3-docker
         state: present
         update_cache: yes
 
-    - name: Install Docker and Compose from Debian repository
-      apt:
-        name:
-          - docker.io
-          - docker-compose
-        state: present
-
-    - name: Set vm.max_map_count for Elasticsearch in sysctl
-      sysctl:
-        name: vm.max_map_count
-        value: '262144'
-        state: present
-        reload: yes
-
-    - name: Create work directory for Elastic
-      file:
-        path: "{{ elastic_work_dir }}"
+    # 2. ПОДГОТОВКА ДИРЕКТОРИЙ ОВНЕРСТВА СТЕКА (ТОЛЬКО НА ХОСТАХ ЛОГОВ/КИБАНЫ)
+    - name: "Create Production Elastic Stack Directory"
+      ansible.builtin.file:
+        path: "{{ stack_work_dir }}"
         state: directory
-        mode: '0755'
+        mode: "0755"
+      when: inventory_hostname in groups['logging_storage'] or inventory_hostname in groups['kibana_host']
 
-    - name: Write production docker-compose configuration s parolem
-      copy:
-        dest: "{{ elastic_work_dir }}/docker-compose.yml"
-        mode: '0644'
+    # 3. ЗАГРУЗКА ИНФРАСТРУКТУРНЫХ ОБРАЗОВ
+    - name: "Pull Elastic Search Core Image"
+      community.docker.docker_image:
+        name: "docker.elastic.co/elasticsearch/elasticsearch:{{ elastic_version }}"
+        source: pull
+      when: inventory_hostname in groups['logging_storage']
+
+    # 4. ГЕНЕРАЦИЯ ОДНОНОДОВОГО DOCKER-COMPOSE ДЛЯ СУБД ЛОГОВ
+    - name: "Write Docker-Compose for Production Single-Node Cluster"
+      ansible.builtin.copy:
+        dest: "{{ stack_work_dir }}/docker-compose.yml"
+        mode: "0644"
         content: |
           version: '3.8'
           services:
             elasticsearch:
-              image: docker.elastic.co/elasticsearch/elasticsearch:{{ elastic_version }}
-              container_name: elasticsearch-storage
+              image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3
+              container_name: elasticsearch-node
+              restart: always
               environment:
                 - discovery.type=single-node
                 - xpack.security.enabled=false
-                - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-              volumes:
-                - esdata:/usr/share/elasticsearch/data
+                - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+                - cluster.routing.allocation.disk.threshold_enabled=false
               ports:
                 - "9200:9200"
+              volumes:
+                - esdata:/usr/share/elasticsearch/data
           volumes:
             esdata:
-              driver: local
+      when: inventory_hostname in groups['logging_storage']
 
-    - name: Restart Elasticsearch container with new settings
-      shell: "docker-compose -f {{ elastic_work_dir }}/docker-compose.yml down && docker-compose -f {{ elastic_work_dir }}/docker-compose.yml up -d"
-
-# ==============================================================================
-# ЧАСТЬ 2: УСТАНОВКА FILEBEAT С ЗЕРКАЛА ЯНДЕКСА
-# ==============================================================================
-- name: Deploy Native Filebeat Service on Web Servers
-  hosts: webservers
-  become: yes
-  vars:
-    prefix_net: "https://"
-    host_mirror: "mirror.yandex.ru"
-    pool_path: "/mirrors/elastic/8/pool/main"
-    package_dir: "/f/filebeat"
-    file_deb: "/filebeat-8.11.3-amd64.deb"
-    filebeat_download_url: "{{ [prefix_net, host_mirror, pool_path, package_dir, file_deb] | join('') }}"
-    elastic_internal_ip: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}"
-  tasks:
-    - name: Skachivanie oficialnogo paketa Filebeat DEB s zerkala Yandeksa
-      get_url:
-        url: "{{ filebeat_download_url }}"
-        dest: /tmp/filebeat.deb
-        mode: '0644'
-
-    - name: Ustanovka Filebeat sluzhby iz lokalnogo fajla DEB
-      apt:
-        deb: /tmp/filebeat.deb
+    # 5. ЗАПУСК БАЗЫ ДАННЫХ ЛОГОВ
+    - name: "Launch Production Single-Node Core Cluster"
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_work_dir }}"
         state: present
-
-    - name: Zapiss vnutrennego konfiga sbora logov v /etc/filebeat/filebeat.yml
-      copy:
-        dest: /etc/filebeat/filebeat.yml
-        content: |
-          filebeat.inputs:
-          - type: log
-            enabled: true
-            paths: [ /var/log/nginx/access.log ]
-            tags: ["nginx-access"]
-          - type: log
-            enabled: true
-            paths: [ /var/log/nginx/error.log ]
-            tags: ["nginx-error"]
-          - type: log
-            enabled: true
-            paths: [ /var/log/syslog ]
-            tags: ["system-syslog"]
-          - type: log
-            enabled: true
-            paths: [ /var/log/auth.log ]
-            tags: ["system-auth"]
-
-          output.elasticsearch:
-            hosts: ["http://{{ elastic_internal_ip }}:9200"]
-            username: "elastic"
-            password: "BobkovDevOps2026"
-            index: "nginx-logs-%{+yyyy.MM.dd}"
-
-          setup.template.name: "nginx"
-          setup.template.pattern: "nginx-logs-*"
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Obnovlenie kesha systemd demonov dlya Filebeat
-      systemd:
-        daemon_reload: yes
-
-    - name: Zapusk i vklyuchenie avtozagruzku sluzhby Filebeat
-      systemd:
-        name: filebeat
-        state: restarted
-        enabled: yes
+      when: inventory_hostname in groups['logging_storage']

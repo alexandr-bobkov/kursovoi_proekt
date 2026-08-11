@@ -1,8 +1,18 @@
 ---
-- name: Install Grafana and Auto-Import Linux Dashboard on Bastion Host
-  hosts: bastion
+- name: Install and Configure Grafana Enterprise via Yandex Pool DEB
+  hosts: grafana_host
   become: yes
   vars:
+    # 1. Локальные параметры REST API
+    local_host: "127.0.0.1"
+    grafana_port: "3000"
+    grafana_url: "http://{{ local_host }}:{{ grafana_port }}"
+
+    api_ds: "/api/datasources"
+    api_pwd: "/api/user/password"
+    api_import: "/api/dashboards/import"
+
+    # 2. Склейка пути к пакету Grafana Labs на зеркале Яндекса
     prefix_net: "https://"
     host_mirror: "mirror.yandex.ru"
     mid_folder: "/mirrors/"
@@ -12,84 +22,177 @@
     tail_path: "/enterprise/deb/pool/main/g/grafana-enterprise"
     file_deb: "/grafana-enterprise_10.2.3_amd64.deb"
     grafana_download_url: "{{ [prefix_net, host_mirror, mid_folder, dom_part1, dom_part2, dom_part3, tail_path, file_deb] | join('') }}"
+
+    # 3. Защищенная склейка ссылок на полные официальные JSON дашборды
+    g_proto: "https://"
+    g_domain: "grafana.com"
+    g_api_base: "/api/dashboards"
+
+    # Хвосты путей конкретных ревизий панелей 1860 и 12708
+    dash_1860_tail: "/1860/revisions/37/download"
+    dash_12708_tail: "/12708/revisions/1/download"
+
+    # Итоговые рабочие ссылки
+    url_dash_1860: "{{ [g_proto, g_domain, g_api_base, dash_1860_tail] | join('') }}"
+    url_dash_12708: "{{ [g_proto, g_domain, g_api_base, dash_12708_tail] | join('') }}"
+
   tasks:
+    # 1. Зачищаем старые битые листы репозиториев
     - name: Udalenie starih repozitoriev Grafana
       file:
         path: /etc/apt/sources.list.d/grafana.list
         state: absent
 
+    # 2. Накатываем необходимые зависимости из официального дистрибутива Яндекса
     - name: Ustanovka neobhodimih zavisimostei
       apt:
-        name: [apt-transport-https, wget, adduser, libfontconfig1, musl]
+        name: [apt-transport-https, wget, adduser, libfontconfig1, musl, curl, jq]
         state: present
         update_cache: yes
 
+    # 3. Скачиваем конкретную стабильную версию 10.2.3 по внутренней сети Яндекса
     - name: Skachivanie paketa Grafana s zerkala Yandeksa
       get_url:
         url: "{{ grafana_download_url }}"
         dest: /tmp/grafana-enterprise.deb
         mode: '0644'
 
+    # 4. Локально устанавливаем Grafana Enterprise из DEB файла
     - name: Lokalnaya ustanovka Grafana Enterprise iz DEB
       apt:
         deb: /tmp/grafana-enterprise.deb
         state: present
 
-    - name: Sozdanie sistemnih direktoriij dlya avto-importa dashbordov
-      file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: grafana
-        mode: '0755'
-      loop:
-        - /etc/grafana/provisioning/datasources
-        - /etc/grafana/provisioning/dashboards
-        - /var/lib/grafana/dashboards
-
-    - name: Avtomaticheskaya nastroika Prometheus kak Data Source
-      copy:
-        dest: /etc/grafana/provisioning/datasources/prometheus.yaml
-        content: |
-          apiVersion: 1
-          datasources:
-            - name: prometheus
-              type: prometheus
-              access: proxy
-              url: http://10.0.10.19:9090
-              isDefault: true
-        mode: '0644'
-
-    - name: Avtomaticheskaya nastroika provaidera dlya poiska JSON dashbordov
-      copy:
-        dest: /etc/grafana/provisioning/dashboards/dashboards.yaml
-        content: |
-          apiVersion: 1
-          providers:
-            - name: 'Automated Dashboards'
-              orgId: 1
-              folder: ''
-              type: file
-              disableDeletion: false
-              editable: true
-              options:
-                path: /var/lib/grafana/dashboards
-        mode: '0644'
-
-    - name: Skachivanie oficialnogo JSON shablona dashborda 1860 (Node Exporter Full)
-      get_url:
-        url: "https://grafana.com"
-        dest: /var/lib/grafana/dashboards/node-exporter-full.json
-        owner: grafana
-        group: grafana
-        mode: '0644'
-
-    - name: Obnovlenie kesha systemd demonov
-      systemd:
-        daemon_reload: yes
-
-    - name: Zapusk i vklyuchenie avtozagruzku Grafana Server
+    # 5. Запуск и добавление демона Grafana в автозагрузку операционной системы
+    - name: Start and enable Grafana service daemon
       systemd:
         name: grafana-server
         state: restarted
         enabled: yes
+
+    # 6. Ожидаем доступности порта
+    - name: Wait for Grafana port to be fully ready
+      wait_for:
+        port: 3000
+        timeout: 45
+
+    # СНАЧАЛА меняем стандартный дефолтный пароль admin на секретный учебный
+    - name: Change default admin password to secure coursework version
+      uri:
+        url: "{{ grafana_url }}{{ api_pwd }}"
+        method: PUT
+        user: "admin"
+        password: "admin"
+        force_basic_auth: yes
+        status_code: [200, 270, 401]
+        body_format: json
+        body:
+          oldPassword: "admin"
+          newPassword: "BobkovDevOps2026"
+          confirmNew: "BobkovDevOps2026"
+
+    # Подключаем источник данных Prometheus с новым паролем BobkovDevOps2026
+    - name: Configure Prometheus Data Source via REST API
+      uri:
+        url: "{{ grafana_url }}{{ api_ds }}"
+        method: POST
+        user: "admin"
+        password: "BobkovDevOps2026"
+        force_basic_auth: yes
+        status_code: [200, 201, 409]
+        body_format: json
+        body:
+          name: "prometheus"
+          type: "prometheus"
+          access: "proxy"
+          url: "http://{{ hostvars[groups['prometheus_host'] | first]['ansible_host'] }}:9090"
+          isDefault: true
+
+    # 9. Скачиваем полные официальные JSON модели панелей на удаленный хост
+    - name: Download Linux Node Exporter dashboard JSON model from official API
+      get_url:
+        url: "{{ url_dash_1860 }}"
+        dest: "/tmp/dashboard_1860.json"
+        mode: '0644'
+        decompress: no
+
+    - name: Download Nginx Exporter dashboard JSON model from official API
+      get_url:
+        url: "{{ url_dash_12708 }}"
+        dest: "/tmp/dashboard_12708.json"
+        mode: '0644'
+        decompress: no
+
+    # 10. Удаляем слепые переменные из скачанных JSON моделей под имя нашего DataSource
+    - name: Patch dashboard 1860 JSON to enforce valid datasource name
+      replace:
+        path: "/tmp/dashboard_1860.json"
+        regexp: '\$\{DS_PROMETHEUS\}'
+        replace: 'prometheus'
+
+    - name: Patch dashboard 12708 JSON to enforce valid datasource name
+      replace:
+        path: "/tmp/dashboard_12708.json"
+        regexp: '\$\{DS_PROMETHEUS\}'
+        replace: 'prometheus'
+
+    # DevOps-ПАТЧ: Переписываем имя задачи с node_exporter на node и фиксируем регулярные выражения!
+    - name: Enforce job name alignment for Node Exporter to match Prometheus Targets
+      replace:
+        path: "/tmp/dashboard_1860.json"
+        regexp: 'job="node_exporter"'
+        replace: 'job="node"'
+
+    - name: Enforce job name alignment for Nginx Exporter to match Prometheus Targets
+      replace:
+        path: "/tmp/dashboard_12708.json"
+        regexp: 'job="nginx_exporter"'
+        replace: 'job="nginx-exporter"'
+
+    # 11. Считываем подготовленные полные JSON структуры напрямую с удаленного диска в Base64
+    - name: Read dashboard 1860 from remote target disk
+      slurp:
+        src: "/tmp/dashboard_1860.json"
+      register: remote_json_1860
+
+    - name: Read dashboard 12708 from remote target disk
+      slurp:
+        src: "/tmp/dashboard_12708.json"
+      register: remote_json_12708
+
+    # 12. Импортируем полноценные структуры на REST API с автоматическим перезаписыванием (overwrite)
+    - name: Import Full Linux Node Exporter Dashboard via REST API
+      uri:
+        url: "{{ grafana_url }}{{ api_import }}"
+        method: POST
+        user: "admin"
+        password: "BobkovDevOps2026"
+        force_basic_auth: yes
+        status_code: [200, 201, 409]
+        body_format: json
+        body:
+          dashboard: "{{ remote_json_1860.content | b64decode | from_json }}"
+          overwrite: true
+          inputs:
+            - name: "DS_PROMETHEUS"
+              pluginId: "prometheus"
+              type: "datasource"
+              value: "prometheus"
+
+    - name: Import Full Nginx Exporter Dashboard via REST API
+      uri:
+        url: "{{ grafana_url }}{{ api_import }}"
+        method: POST
+        user: "admin"
+        password: "BobkovDevOps2026"
+        force_basic_auth: yes
+        status_code: [200, 201, 409]
+        body_format: json
+        body:
+          dashboard: "{{ remote_json_12708.content | b64decode | from_json }}"
+          overwrite: true
+          inputs:
+            - name: "DS_PROMETHEUS"
+              pluginId: "prometheus"
+              type: "datasource"
+              value: "prometheus"
