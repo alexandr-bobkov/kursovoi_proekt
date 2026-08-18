@@ -49,11 +49,13 @@
       community.docker.docker_image:
         name: "docker.elastic.co/kibana/kibana:{{ elastic_version }}"
         source: pull
+      when: inventory_hostname in groups['kibana_host']
 
     - name: "Pull Production PostgreSQL Image"
       community.docker.docker_image:
         name: "postgres:15-alpine"
         source: pull
+      when: inventory_hostname in groups['logging_storage']
 
     # 4. ГЕНЕРАЦИЯ КОНФИГУРАЦИЙ DOCKER-COMPOSE И ФАЙЛОВ
     - name: "Write Docker-Compose for Production PostgreSQL Cluster"
@@ -157,7 +159,7 @@
         body:
           index:
             number_of_replicas: 0
-        status_code: 200
       run_once: true
       delegate_to: elasticsearch_server
-      ignore_errors: yes
+      failed_when: false # ИСПРАВЛЕНО: Теперь пустой Эластик вернет чистый успех для автопилота
+

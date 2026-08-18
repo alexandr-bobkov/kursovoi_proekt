@@ -12,16 +12,32 @@
     stack_work_dir: "/opt/elastic-stack"
 
   tasks:
-    # 1. УКАЗЫВАЕМ ТОЧНЫЕ КОРРЕКТНЫЕ ИМЕНА ПАКЕТОВ ДЛЯ DEBIAN 13
-    - name: "Install Native Docker Engine and Utilities for Debian 13"
-      ansible.builtin.apt:
-        name:
-          - docker.io
-          - docker-buildx
-          - docker-compose  # Нативное Enterprise-имя пакета в Debian 13
-          - python3-docker
-        state: present
-        update_cache: yes
+    # 1. ОТКАЗОУСТОЙЧИВАЯ УСТАНОВКА DOCKER ENGINE С АВТОПЕРЕКЛЮЧЕНИЕМ КЭША
+    - name: "Install Native Docker Engine and Utilities"
+      block:
+        # Вариант А: Быстрый накат на уже прогретые после рестарта машины
+        - name: "TRY: Install Docker packages without network cache update"
+          ansible.builtin.apt:
+            name:
+              - docker.io
+              - docker-buildx
+              - docker-compose
+              - python3-docker
+            state: present
+            update_cache: no
+
+      rescue:
+        # Вариант Б: Если это холодный старт после полного дестроя — обновляем кэш и ставим
+        - name: "FALLBACK: Force update cache and install Docker for clean deployment"
+          ansible.builtin.apt:
+            name:
+              - docker.io
+              - docker-buildx
+              - docker-compose
+              - python3-docker
+            state: present
+            update_cache: yes
+
 
     # 2. ПОДГОТОВКА ДИРЕКТОРИЙ ОВНЕРСТВА СТЕКА (ТОЛЬКО НА ХОСТАХ ЛОГОВ/КИБАНЫ)
     - name: "Create Production Elastic Stack Directory"
@@ -31,12 +47,23 @@
         mode: "0755"
       when: inventory_hostname in groups['logging_storage'] or inventory_hostname in groups['kibana_host']
 
-    # 3. ЗАГРУЗКА ИНФРАСТРУКТУРНЫХ ОБРАЗОВ
-    - name: "Pull Elastic Search Core Image"
-      community.docker.docker_image:
-        name: "docker.elastic.co/elasticsearch/elasticsearch:{{ elastic_version }}"
-        source: pull
+    # 3. УМНАЯ ЗАГРУЗКА ОБРАЗА С АВТОПЕРЕКЛЮЧЕНИЕМ ЗЕРКАЛА
+    - name: "Pull Elastic Search Core Image with Fallback"
+      block:
+        # Вариант А: Пробуем быстро скачать через зеркало Яндекса
+        - name: "TRY: Pull Elasticsearch from Yandex Cloud Mirror"
+          community.docker.docker_image:
+            name: "cr.yandex/mirror/elastic/elasticsearch:{{ elastic_version }}"
+            source: pull
+
+      rescue:
+        # Вариант Б: Если Яндекс лежит или выдал 404, качаем напрямую с официального домена
+        - name: "FALLBACK: Pull Elasticsearch from Official Elastic Registry"
+          community.docker.docker_image:
+            name: "docker.elastic.co/elasticsearch/elasticsearch:{{ elastic_version }}"
+            source: pull
       when: inventory_hostname in groups['logging_storage']
+
 
     # 4. ГЕНЕРАЦИЯ ОДНОНОДОВОГО DOCKER-COMPOSE ДЛЯ СУБД ЛОГОВ
     - name: "Write Docker-Compose for Production Single-Node Cluster"
