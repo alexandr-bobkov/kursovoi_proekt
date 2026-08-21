@@ -1,188 +1,170 @@
 ---
-# ==============================================================================
-# 3. ПОЛНЫЙ ДЕПЛОЙ ВЕБ-СТЕКА, ЭКСПОРТЕРОВ И АГЕНТОВ FILEBEAT НА ВЕБ-НОДАХ
-# ==============================================================================
-- name: "Deploy Production Web Nodes Stack"
-  hosts: web_nodes:logging_storage:kibana_host:grafana_host
+- name: "Шаг 3: Настройка веб-узлов кластера"
+  hosts: web_nodes
   become: true
-  gather_facts: true
-  vars:
-    php_version: "8.4"
-    web_work_dir: "/var/www/bobkov_site"
-    elastic_version: "8.11.3"
-
   tasks:
-    # 1. НАСТРОЙКА СЕТЕВОГО ОКРУЖЕНИЯ ДЛЯ РЕПОЗИТОРИЕВ ЯНДЕКСА
-    - name: "Force APT to use IPv4 only to prevent network timeouts permanently"
-      ansible.builtin.copy:
-        dest: "/etc/apt/apt.conf.d/99force-ipv4"
-        mode: "0644"
-        content: |
-          Acquire::ForceIPv4 "true";
-
-    # 2. УСТАНОВКА ВЕБ-КОМПОНЕНТОВ (ВЫПОЛНЯЕТСЯ СТРОГО НА ВЕБ-НОДАХ БЭКЕНДА)
-    - name: "Install Production Web Server and PHP Processing Engine"
+    - name: "Установка веб-сервера Nginx"
       ansible.builtin.apt:
-        name:
-          - nginx
-          - php8.4-fpm
-          - php8.4-curl
-          - php8.4-gd
-          - php8.4-intl
-          - php8.4-mbstring
-          - php8.4-xml
+        name: nginx
         state: present
         update_cache: yes
-      when: inventory_hostname in groups['web_nodes']
 
-    - name: "Create Production Directory for Bobkov site"
-      ansible.builtin.file:
-        path: "{{ web_work_dir }}"
-        state: directory
+    - name: "Установка Filebeat 7.17.13 (напрямую .deb пакетом с зеркала Яндекса)"
+      ansible.builtin.apt:
+        deb: "https://mirror.yandex.ru/mirrors/elastic/7/pool/main/f/filebeat/filebeat-7.17.13-amd64.deb"
+        state: present
+
+    # =========================================================================
+    # ДИНАМИЧЕСКИЙ ГЕНЕРАТОР ВЕБ-САЙТА (Bash + Systemd) - БЕЗ ЭМОДЗИ
+    # =========================================================================
+    - name: "Создать скрипт динамического обновления сайта"
+      ansible.builtin.copy:
+        dest: /usr/local/bin/update_site.sh
         mode: "0755"
-        owner: "www-data"
-        group: "www-data"
-      when: inventory_hostname in groups['web_nodes']
-
-    - name: "Deploy Neo-Style Custom site Page"
-      ansible.builtin.copy:
-        dest: "{{ web_work_dir }}/index.php"
-        mode: "0644"
-        owner: "www-data"
-        group: "www-data"
         content: |
-          <?php
-          header("Content-Type: text/html; charset=utf-8");
-          $hostname = gethostname();
-          $server_ip = $_SERVER['SERVER_ADDR'];
-          ?>
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>DevOps Enterprise Контур Бобкова А.К.</title>
-              <style>
-                  body { background: #0a0a12; color: #00ffcc; font-family: 'Courier New', monospace; text-align: center; padding-top: 10%; }
-                  .container { border: 2px solid #ff007f; display: inline-block; padding: 30px; box-shadow: 0 0 20px #ff007f; background: #11111e; }
-                  h1 { color: #ff007f; text-shadow: 0 0 10px #ff007f; }
-                  .info { color: #00ffcc; font-size: 1.2em; margin: 15px 0; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>ИНФРАСТРУКТУРА РАЗВЕРНУТА УСПЕШНО</h1>
-                  <div class="info">Курсовой проект студент: <strong>Бобков А.К.</strong></div>
-                  <div class="info">Целевой Enterprise-вариант с балансировщиком ALB</div>
-                  <div class="info">Текущий бэкенд-хост обработки: <code><?php echo $hostname; ?> (<?php echo $server_ip; ?>)</code></div>
-              </div>
-          </body>
-          </html>
-      when: inventory_hostname in groups['web_nodes']
+          #!/bin/bash
+          while true; do
+              HOSTNAME=$(hostname)
+              IP=$(hostname -I | awk '{print $1}')
+              CPU_LOAD=$(cat /proc/loadavg | awk '{print $1, $2, $3}')
+              RAM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+              RAM_USED=$(free -m | awk '/^Mem:/{print $3}')
+              UPTIME=$(uptime -p | sed 's/up //')
 
-    - name: "Configure Production Nginx Virtual Host Configuration"
+              cat <<EOF > /var/www/html/index.html
+              <!DOCTYPE html>
+              <html lang="ru">
+              <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>Enterprise Cluster</title>
+                  <meta http-equiv="refresh" content="3">
+                  <style>
+                      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%); color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                      .container { background: rgba(255, 255, 255, 0.6); padding: 40px; border-radius: 20px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.2); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.8); text-align: center; max-width: 600px; }
+                      h1 { font-size: 2.2em; color: #2c3e50; margin-bottom: 20px; }
+                      .stat-box { background: rgba(255, 255, 255, 0.8); margin: 12px 0; padding: 15px; border-radius: 12px; font-size: 1.2em; font-weight: bold; transition: transform 0.2s; display: flex; align-items: center; justify-content: left; }
+                      .stat-box:hover { transform: scale(1.02); }
+                      .footer { margin-top: 25px; font-size: 0.9em; color: #666; }
+                  </style>
+              </head>
+              <body>
+                  <div class="container">
+                      <h1>Добро пожаловать в Enterprise Облако!</h1>
+                      <p>Ваш запрос успешно обработан балансировщиком Yandex ALB.</p>
+                      
+                      <div class="stat-box">Node:&nbsp;<span style="color:#e74c3c;">${HOSTNAME}</span></div>
+                      <div class="stat-box">IP:&nbsp;<span style="color:#2980b9;">${IP}</span></div>
+                      <div class="stat-box">CPU:&nbsp;<span style="color:#d35400;">${CPU_LOAD}</span></div>
+                      <div class="stat-box">RAM:&nbsp;<span style="color:#8e44ad;">${RAM_USED} MB / ${RAM_TOTAL} MB</span></div>
+                      <div class="stat-box">Uptime:&nbsp;<span style="color:#27ae60;">${UPTIME}</span></div>
+                      
+                      <div class="footer">Страница обновляется сама каждые 3 секунды.</div>
+                  </div>
+              </body>
+              </html>
+          EOF
+              sleep 3
+          done
+
+    - name: "Создать systemd службу для генератора сайта"
       ansible.builtin.copy:
-        dest: "/etc/nginx/sites-available/default"
-        mode: "0644"
+        dest: /etc/systemd/system/dynamic-website.service
+        content: |
+          [Unit]
+          Description=Dynamic Enterprise Website Generator
+          After=network.target nginx.service
+
+          [Service]
+          Type=simple
+          User=root
+          ExecStart=/usr/local/bin/update_site.sh
+          Restart=always
+          RestartSec=3
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: "Перезагрузить systemd и запустить службу"
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        name: dynamic-website
+        state: restarted
+        enabled: yes
+    # =========================================================================
+
+    - name: "Настройка Nginx Stub Status для экспортёра"
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/status.conf
         content: |
           server {
-              listen 80 default_server;
-              listen [::]:80 default_server;
-              root /var/www/bobkov_site;
-              index index.php index.html;
-              server_name _;
-
-              # ВШИТЫЙ БЛОК ТЕЛЕМЕТРИИ ДЛЯ ОЖИВЛЕНИЯ NGINX EXPORTER
+              listen 127.0.0.1:8080;
+              server_name localhost;
               location /stub_status {
                   stub_status on;
+                  access_log off;
                   allow 127.0.0.1;
                   deny all;
               }
-
-              location / {
-                  try_files $uri $uri/ =404;
-              }
-              location ~ \.php$ {
-                  include snippets/fastcgi-php.conf;
-                  fastcgi_pass unix:/run/php/php8.4-fpm.sock;
-              }
           }
-      when: inventory_hostname in groups['web_nodes']
-
-
-    - name: "Enforce and restart Nginx & PHP services"
-      ansible.builtin.systemd:
-        name: "{{ item }}"
-        state: restarted
-        enabled: true
-      loop:
-        - php8.4-fpm
-        - nginx
-      when: inventory_hostname in groups['web_nodes']
-
-    # 3. УСТАНОВКА СИСТЕМНОГО ЭКСПОРТЕРА ЖЕЛЕЗА (НА ВСЕХ УПРАВЛЯЮЩИХ СЕРВЕРАХ)
-    - name: "Install Native Prometheus Node Exporter Package via apt"
-      ansible.builtin.apt:
-        name: prometheus-node-exporter
-        state: present
-      when: inventory_hostname not in groups['web_nodes']
-
-    # 4. ОРКЕСТРАЦИЯ КОНТЕЙНЕРОВ СБОРА МЕТРИК НА ВЕБ-НОДАХ
-    - name: "Launch Node Exporter Container on Web Nodes"
-      community.docker.docker_container:
-        name: "node-exporter"
-        image: "prom/node-exporter:v1.6.1"
-        state: started
-        restart_policy: always
-        ports:
-          - "9100:9100"
-      when: inventory_hostname in groups['web_nodes']
-
-    # ==============================================================================
-    # 5. ОРКЕСТРАЦИЯ СБОРА МЕТРИК ВЕБ-СЕРВЕРА NGINX
-    # ==============================================================================
-    - name: "Launch Nginx Prometheus Exporter Container"
-      community.docker.docker_container:
-        name: "nginx-exporter"
-        image: "nginx/nginx-prometheus-exporter:1.0.0"
-        state: started
-        restart_policy: always
-        network_mode: host # ДОБАВЛЕНО: Открывает контейнеру прямую сеть до хоста
-        command: "-nginx.scrape-uri=http://127.0.0.1:80/stub_status" # ИСПРАВЛЕНО: Точный снайперский путь к метрикам!
-      when: inventory_hostname in groups['web_nodes']
-
-
-    # 6. Enterprise-БЛОК ЛОГИРОВАНИЯ: РАЗВЕРТЫВАНИЕ AGENT FILEBEAT
-    - name: "Create Production Filebeat Home Directory"
-      ansible.builtin.file:
-        path: "/opt/filebeat-agent"
-        state: directory
-        mode: "0755"
-      when: inventory_hostname in groups['web_nodes']
-
-    - name: "Generate Valid Configuration Profile for Filebeat Agent"
-      ansible.builtin.copy:
-        dest: "/opt/filebeat-agent/filebeat.yml"
         mode: "0644"
+      notify: Перезагрузить Nginx
+
+    - name: "Запуск службы Nginx"
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: "Запуск Nginx Prometheus Exporter"
+      community.docker.docker_container:
+        name: nginx-exporter
+        image: "nginx/nginx-prometheus-exporter:0.11.0"
+        restart_policy: always
+        network_mode: host
+        command:
+          - "-nginx.scrape-uri=http://127.0.0.1:8080/stub_status"
+
+    # =========================================================================
+    # ОБНОВЛЕННЫЙ FILEBEAT (МЕТАДАННЫЕ DOCKER ДОБАВЛЕНЫ)
+    # =========================================================================
+    - name: "Настройка агента Filebeat"
+      ansible.builtin.copy:
+        dest: /etc/filebeat/filebeat.yml
         content: |
           filebeat.inputs:
           - type: log
             enabled: true
             paths:
-              - /var/log/nginx/access.log
-              - /var/log/nginx/error.log
-          output.elasticsearch:
-            hosts: ["http://10.100.20.26:9200"] # Снайперски точный IP твоего Эластика
-          logging.level: info
-      when: inventory_hostname in groups['web_nodes']
+              - /var/log/nginx/*.log
 
-    - name: "Launch Universal Filebeat Infrastructure Agent on Web Nodes"
-      community.docker.docker_container:
-        name: "filebeat-web"
-        image: "docker.elastic.co/beats/filebeat:{{ elastic_version }}"
+          - type: container
+            enabled: true
+            paths:
+              - '/var/lib/docker/containers/*/*.log'
+
+          processors:
+            - add_docker_metadata:
+                host: "unix:///var/run/docker.sock"
+
+          output.elasticsearch:
+            hosts: ["{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
+        mode: "0644"
+      notify: Перезапустить Filebeat
+
+    - name: "Запуск и включение автозапуска Filebeat"
+      ansible.builtin.systemd:
+        name: filebeat
         state: started
-        restart_policy: always
-        user: "root"
-        volumes:
-          - /opt/filebeat-agent/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-          - /var/log/nginx:/var/log/nginx:ro
-          - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      when: inventory_hostname in groups['web_nodes']
+        enabled: yes
+
+  handlers:
+    - name: Перезагрузить Nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+
+    - name: Перезапустить Filebeat
+      ansible.builtin.systemd:
+        name: filebeat
+        state: restarted

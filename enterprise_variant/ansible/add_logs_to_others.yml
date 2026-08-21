@@ -1,0 +1,46 @@
+---
+- name: "Установка Filebeat на остальные серверы кластера"
+  hosts: all:!web_nodes
+  become: true
+  tasks:
+    - name: "Установка Filebeat 7.17.13"
+      ansible.builtin.apt:
+        deb: "https://mirror.yandex.ru/mirrors/elastic/7/pool/main/f/filebeat/filebeat-7.17.13-amd64.deb"
+        state: present
+
+    - name: "Настройка агента Filebeat (Системные логи + Docker)"
+      ansible.builtin.copy:
+        dest: /etc/filebeat/filebeat.yml
+        content: |
+          filebeat.inputs:
+          - type: log
+            enabled: true
+            paths:
+              - /var/log/syslog
+              - /var/log/auth.log
+
+          - type: container
+            enabled: true
+            paths:
+              - '/var/lib/docker/containers/*/*.log'
+
+          processors:
+            - add_docker_metadata:
+                host: "unix:///var/run/docker.sock"
+
+          output.elasticsearch:
+            hosts: ["{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
+        mode: "0644"
+      notify: Перезапустить Filebeat
+
+    - name: "Запуск службы Filebeat"
+      ansible.builtin.systemd:
+        name: filebeat
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Перезапустить Filebeat
+      ansible.builtin.systemd:
+        name: filebeat
+        state: restarted

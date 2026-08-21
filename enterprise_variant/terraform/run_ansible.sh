@@ -1,64 +1,70 @@
 #!/bin/bash
-# ==============================================================================
-# СКРИПТ АВТОМАТИЧЕСКОГО ХОЛОДНОГО СТАРТА (COLD START) КОНТУРА БОБКОВА А.К.
-# ==============================================================================
-# Автоматический проброс рабочего ключа ED25519 в память сессии
-if [ -z "$SSH_AUTH_SOCK" ]; then
-   eval $(ssh-agent -s) >/dev/null
-   ssh-add ~/.ssh/id_ed25519 >/dev/null 2>&1
-fi
+set -e
 
-# Жестко прыгаем в рабочую папку Ansible, чтобы пути до файлов не терялись
+# Переходим в папку ansible
 cd "$(dirname "$0")/../ansible"
-
-# 1. Автоматически очищаем старый кэш SSH-ключей Linux, чтобы не было конфликтов IP
-ssh-keygen -f "$HOME/.ssh/known_hosts" -R "*" >/dev/null 2>&1
 export ANSIBLE_HOST_KEY_CHECKING=False
 
-# Динамически вытаскиваем IP-адреса ВСЕХ управляющих хостов из сгенерированного инвентаря
-BASTION_IP=$(grep -oP 'ansible_host=\K[0-9.]+' hosts.ini | sed -n '1p')
-KIBANA_IP=$(grep -A1 '\[kibana_host\]' hosts.ini | grep -oP 'ansible_host=\K[0-9.]+')
-ELASTIC_IP=$(grep -A1 '\[logging_storage\]' hosts.ini | grep -oP 'ansible_host=\K[0-9.]+')
-GRAFANA_IP=$(grep -A1 '\[grafana_host\]' hosts.ini | grep -oP 'ansible_host=\K[0-9.]+')
+# Локализируем ключ
+KEY_PATH="$(pwd)/../terraform/id_ed25519"
+if [ ! -f "$KEY_PATH" ]; then
+    KEY_PATH="$(pwd)/id_ed25519"
+fi
+chmod 600 "$KEY_PATH" 2>/dev/null || true
 
-echo "=== [DevOps Auto-Pilot] Current working directory changed to: $(pwd) ==="
-echo "=== [DevOps Auto-Pilot] Scanning cloud network topology... ==="
+# Запускаем ssh-agent и добавляем ключ (решает проблему с ProxyJump)
+if [ -z "$SSH_AUTH_SOCK" ]; then
+    eval $(ssh-agent -s) >/dev/null
+    ssh-add "$KEY_PATH" >/dev/null 2>&1
+else
+    ssh-add "$KEY_PATH" >/dev/null 2>&1 || true
+fi
 
-# 1. Сначала  дожидаемся готовности самого Бастиона наружу
-while ! nc -z -w3 "$BASTION_IP" 22; do
-  echo "--> Waiting for Bastion Gateway (${BASTION_IP}:22) to respond..."
-  sleep 4
+echo "=== [DevOps Auto-Pilot] Запуск пайплайна развертывания ==="
+
+# Динамически достаем IP бастиона из свежего hosts.ini
+BASTION_IP=$(grep 'bastion_host' hosts.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+# Умное ожидание вместо слепого sleep 60
+echo "--> [Этап 1/3] Ожидание инициализации SSH (порт 22) на Бастионе ($BASTION_IP)..."
+until nc -z -w 5 "$BASTION_IP" 22 2>/dev/null; do
+    echo "    [Ожидание] cloud-init еще настраивает виртуалку, ждем 10 секунд..."
+    sleep 10
 done
-echo "=== [SUCCESS] Bastion is online! Testing internal private perimeter via secure tunnel... ==="
+echo "=== [OK] Бастион поднялся и готов принимать подключения! ==="
 
-# 2. Проверяем порты внутренних нод РУКАМИ БАСТИОНА через SSH-прыжок
-for HOST_IP in "$ELASTIC_IP" "$KIBANA_IP" "$GRAFANA_IP"; do
-  while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_ed25519 -q debian@$BASTION_IP "nc -z -w3 $HOST_IP 22"; do
-    echo "--> Internal node ${HOST_IP}:22 is still warming up inside VPC. Retrying via Bastion..."
-    sleep 4
-  done
-  echo "--> [OK] Node ${HOST_IP}:22 is reachable!"
-done
+echo "--> [Этап 2/3] Ожидание готовности баз данных и логирования (через ProxyJump)..."
+ansible kibana_host,grafana_host,logging_storage -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 2
 
-echo "=== [SUCCESS] ALL Infrastructure Nodes are fully ready! Starting Pipeline... ==="
+echo "--> [Этап 3/3] Ожидание готовности веб-нод (через ProxyJump)..."
+ansible web_nodes -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 2
+
+echo "=== [OK] Все серверы готовы к конфигурированию! ==="
 echo "=============================================================================="
 
-# ШАГ 1: Разворачиваем Docker везде и ядро Elasticsearch на хостах хранения логов
-ansible-playbook -i hosts.ini playbook_logging.yml --limit 'all:!bastion_host'
-if [ $? -ne 0 ]; then echo "Step 1 Failed!"; exit 1; fi
-
-# ШАГ 2: Конфигурируем СУБД PostgreSQL, Kibana и универсальный Filebeat
-ansible-playbook -i hosts.ini deploy_infra_logging.yml --limit 'all:!bastion_host'
-if [ $? -ne 0 ]; then echo "Step 2 (Logging Infrastructure) Failed!"; exit 1; fi
-
-# ШАГ 3: Накатываем веб-стек (PHP 8.4, Nginx, Filebeat) на веб-ноды сайта
-ansible-playbook -i hosts.ini update_web.yml --limit 'all:!bastion_host'
-if [ $? -ne 0 ]; then echo "Step 3 (Web Nodes) Failed!"; exit 1; fi
-
-# ШАГ 4: В конце включаем стек аналитики Grafana, Prometheus и Go-адаптер CrunchyData
-ansible-playbook -i hosts.ini deploy_grafana.yml --limit 'all:!bastion_host'
-if [ $? -ne 0 ]; then echo "Step 4 (Grafana) Failed!"; exit 1; fi
+# Запуск плейбуков
+ansible-playbook -i hosts.ini playbook_logging.yml --limit 'all:!bastion'
+ansible-playbook -i hosts.ini deploy_infra_logging.yml --limit 'all:!bastion'
+ansible-playbook -i hosts.ini update_web.yml --limit 'all:!bastion'
+ansible-playbook -i hosts.ini deploy_grafana.yml --limit 'all:!bastion'
+ansible-playbook -i hosts.ini add_logs_to_others.yml
 
 echo "=============================================================================="
-echo "=== ИФРАСТРУКТУРА РАЗВЕРНУТА НА 100%! ==="
+echo "=== [HEALTH CHECK] АВТОМАТИЧЕСКАЯ ПРОВЕРКА СЕРВИСОВ ==="
+echo "=============================================================================="
+
+echo "--> Проверка Web-серверов (порт 80)..."
+ansible web_nodes -i hosts.ini -m wait_for -a "port=80 timeout=30 state=started"
+
+echo "--> Проверка Elasticsearch (порт 9200)..."
+ansible logging_storage -i hosts.ini -m wait_for -a "port=9200 timeout=30 state=started"
+
+echo "--> Проверка Kibana (порт 5601)..."
+ansible kibana_host -i hosts.ini -m wait_for -a "port=5601 timeout=30 state=started"
+
+echo "--> Проверка Grafana (порт 3000)..."
+ansible grafana_host -i hosts.ini -m wait_for -a "port=3000 timeout=30 state=started"
+
+echo "=============================================================================="
+echo "=== ИНФРАСТРУКТУРА УСПЕШНО РАЗВЕРНУТА НА 100%! ==="
 echo "=============================================================================="

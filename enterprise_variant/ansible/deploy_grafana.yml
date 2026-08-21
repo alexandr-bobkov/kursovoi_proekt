@@ -1,103 +1,192 @@
-    # ==============================================================================
-    # 5. НА ТИВНЫЙ SYSTEMD СЕРВИС АДАПТЕРА (БЕЗ DOCKER BUILD И ПУСТЫХ ПЕРЕМЕННЫХ)
-    # ==============================================================================
-    - name: "Create Production Directory for Adapter Binary"
-      ansible.builtin.file:
-        path: "/opt/adapter"
-        state: directory
-        mode: "0755"
+---
+- name: "Шаг 4: Развертывание Grafana и Prometheus"
+  hosts: grafana_host
+  become: true
+  vars_files:
+    - secrets.yml
+  vars:
+    g_dir: "/opt/grafana"
+    p_dir: "/opt/prometheus"
 
-    - name: "Deliver Pre-built Adapter Binary to Target Host"
-      ansible.builtin.copy:
-        src: "files/pg-adapter"
-        dest: "/opt/adapter/pg-adapter"
-        mode: "0755"
-
-    - name: "Configure and Deploy systemd Service Unit for Adapter"
-      ansible.builtin.copy:
-        dest: "/etc/systemd/system/pg-prometheus-adapter.service"
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=PostgreSQL Prometheus Adapter (Remote Write Sink)
-          After=network.target
-
-          [Service]
-          Type=simple
-          # Исправлено: Собираем гарантированные дефолты CrunchyData, не зависящие от стирания памяти Ansible
-          Environment="DATABASE_URL=postgresql://crunchy_admin:BobkovDevOps2026@{{ postgres_target_ip }}:5432/postgres?sslmode=disable"
-          # Исправлено: Используем верный внутренний флаг порта адаптера --port
-          ExecStart=/opt/adapter/pg-adapter --port=9201
-          Restart=always
-          RestartSec=5
-
-          [Install]
-          WantedBy=multi-user.target
-
-    - name: "Enforce and Start Systemd Adapter Service"
-      ansible.builtin.systemd:
-        name: pg-prometheus-adapter
-        daemon_reload: yes
-        enabled: yes
-        state: restarted
-
-    # ==============================================================================
-    # 6. ОРКЕСТРАЦИЯ ОСТАЛЬНЫХ СЕРВИСОВ МОНИТОРИНГА
-    # ==============================================================================
-    - name: "Fix Permissions for Prometheus and Grafana Directories"
+  tasks:
+    - name: "Создание базовых директорий"
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: "0777" # Исправлено: Выдаем полные права, чтобы контейнеры не зависали на диске!
+        mode: "0777"
       loop:
+        - "{{ p_dir }}"
         - "{{ p_dir }}/data"
+        - "{{ g_dir }}"
         - "{{ g_dir }}/provisioning"
+        - "{{ g_dir }}/provisioning/datasources"
+        - "{{ g_dir }}/provisioning/dashboards"
 
-    - name: "Pull Prometheus image"
-      community.docker.docker_image:
-        name: "mirror.gcr.io/prom/prometheus:v2.45.0"
-        source: pull
-        state: present
+    - name: "Генерация конфигурации Prometheus"
+      ansible.builtin.copy:
+        dest: "{{ p_dir }}/prometheus.yml"
+        content: |
+          global:
+            scrape_interval: 15s
 
-    - name: "Launch Prometheus Container"
+          scrape_configs:
+            - job_name: 'prometheus_self'
+              static_configs:
+                - targets: ['localhost:9090']
+
+            - job_name: 'node_exporter'
+              file_sd_configs:
+                - files:
+                    - '/etc/prometheus/targets.json'
+
+            - job_name: 'nginx_exporter'
+              file_sd_configs:
+                - files:
+                    - '/etc/prometheus/targets_nginx.json'
+
+            - job_name: 'postgres_exporter'
+              file_sd_configs:
+                - files:
+                    - '/etc/prometheus/targets_postgres.json'
+        mode: '0644'
+
+    - name: "Генерация динамических целей для Node Exporter"
+      ansible.builtin.copy:
+        dest: "{{ p_dir }}/targets.json"
+        content: |
+          {% set targets_list = [] %}
+          {% for host in groups['all'] %}
+            {% if hostvars[host]['ansible_host'] is defined and host != 'bastion_host' %}
+              {% set _ = targets_list.append({
+                "targets": [ hostvars[host]['ansible_host'] ~ ':9100' ],
+                "labels": { "instance": host }
+              }) %}
+            {% endif %}
+          {% endfor %}
+          {{ targets_list | to_nice_json }}
+        mode: '0644'
+
+    - name: "Генерация динамических целей для Nginx Exporter"
+      ansible.builtin.copy:
+        dest: "{{ p_dir }}/targets_nginx.json"
+        content: |
+          {% set nginx_targets = [] %}
+          {% for host in groups['web_nodes'] %}
+            {% if hostvars[host]['ansible_host'] is defined %}
+              {% set _ = nginx_targets.append({
+                "targets": [ hostvars[host]['ansible_host'] ~ ':9113' ],
+                "labels": { "instance": host }
+              }) %}
+            {% endif %}
+          {% endfor %}
+          {{ nginx_targets | to_nice_json }}
+        mode: '0644'
+
+    - name: "Генерация динамических целей для PostgreSQL Exporter (pg-adapter)"
+      ansible.builtin.copy:
+        dest: "{{ p_dir }}/targets_postgres.json"
+        content: |
+          {% set pg_targets = [] %}
+          {% for host in groups['logging_storage'] %}
+            {% if hostvars[host]['ansible_host'] is defined %}
+              {% set _ = pg_targets.append({
+                "targets": [ hostvars[host]['ansible_host'] ~ ':9187' ],
+                "labels": { "instance": host }
+              }) %}
+            {% endif %}
+          {% endfor %}
+          {{ pg_targets | to_nice_json }}
+        mode: '0644'
+
+    - name: "Настройка подключения источника данных для Grafana"
+      ansible.builtin.copy:
+        dest: "{{ g_dir }}/provisioning/datasources/ds.yml"
+        content: |
+          apiVersion: 1
+          datasources:
+            - name: "prometheus"
+              type: "prometheus"
+              access: "proxy"
+              url: "http://127.0.0.1:9090"
+              isDefault: true
+        mode: '0644'
+
+    - name: "Настройка провайдера дашбордов Grafana"
+      ansible.builtin.copy:
+        dest: "{{ g_dir }}/provisioning/dashboards/dash.yml"
+        content: |
+          apiVersion: 1
+          providers:
+            - name: 'Enterprise Dashboards'
+              orgId: 1
+              folder: 'Imported Dashboards'
+              type: file
+              disableDeletion: false
+              updateIntervalSeconds: 10
+              options:
+                path: /etc/grafana/provisioning/dashboards
+        mode: '0644'
+
+    - name: "Загрузка дашборда Node Exporter (1860)"
+      ansible.builtin.get_url:
+        url: "https://grafana.com/api/dashboards/1860/revisions/37/download"
+        dest: "/tmp/node_exporter_full.json"
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: "Загрузка дашборда Nginx Exporter (12708)"
+      ansible.builtin.get_url:
+        url: "https://grafana.com/api/dashboards/12708/revisions/1/download"
+        dest: "/tmp/nginx_exporter.json"
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: "Патчинг и размещение дашбордов"
+      ansible.builtin.shell: |
+        if [ -f /tmp/node_exporter_full.json ]; then
+          sed -i 's/${DS_PROMETHEUS}/prometheus/g' /tmp/node_exporter_full.json
+          cp /tmp/node_exporter_full.json {{ g_dir }}/provisioning/dashboards/node_exporter.json
+        fi
+        if [ -f /tmp/nginx_exporter.json ]; then
+          sed -i 's/${DS_PROMETHEUS}/prometheus/g' /tmp/nginx_exporter.json
+          cp /tmp/nginx_exporter.json {{ g_dir }}/provisioning/dashboards/nginx_exporter.json
+        fi
+      changed_when: false
+
+    - name: "Запуск контейнера Prometheus"
       community.docker.docker_container:
         name: prometheus-server
-        image: "mirror.gcr.io/prom/prometheus:v2.45.0"
+        image: "prom/prometheus:v2.45.0"
         restart_policy: always
-        network_mode: host # Исправлено: Даем прямую сеть до хоста к порту 9201
+        network_mode: host
         volumes:
           - "{{ p_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
           - "{{ p_dir }}/targets.json:/etc/prometheus/targets.json:ro"
           - "{{ p_dir }}/targets_nginx.json:/etc/prometheus/targets_nginx.json:ro"
+          - "{{ p_dir }}/targets_postgres.json:/etc/prometheus/targets_postgres.json:ro"
           - "{{ p_dir }}/data:/prometheus"
         command:
           - "--config.file=/etc/prometheus/prometheus.yml"
           - "--storage.tsdb.path=/prometheus"
           - "--web.enable-lifecycle"
 
-    - name: "Pull Grafana Enterprise image"
-      community.docker.docker_image:
-        name: "mirror.gcr.io/grafana/grafana-enterprise:10.2.3"
-        source: pull
-        state: present
-
-    - name: "Launch Grafana Container"
+    - name: "Запуск контейнера Grafana"
       community.docker.docker_container:
         name: grafana-server
-        image: "mirror.gcr.io/grafana/grafana-enterprise:10.2.3"
+        image: "grafana/grafana-enterprise:10.2.3"
         restart_policy: always
         network_mode: host
-        user: "472"
+        user: "0"
         env:
           GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password | default('BobkovDevOps2026') }}"
           GF_PATHS_PROVISIONING: "/etc/grafana/provisioning"
         volumes:
           - "{{ g_dir }}/provisioning:/etc/grafana/provisioning"
 
-    - name: "Wait for Core Engine Network Sockets Readiness"
+    - name: "Ожидание готовности Prometheus и Grafana"
       ansible.builtin.wait_for:
         port: "{{ item }}"
-        timeout: 45
+        timeout: 60
       loop:
         - 9090
         - 3000

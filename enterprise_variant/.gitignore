@@ -1,0 +1,22 @@
+# === Секреты и доступы ===
+*.json
+*.key
+*.pem
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# === Состояние инфраструктуры Terraform ===
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# === Динамические файлы инвентаря Ansible ===
+hosts.ini
+
+# === Временные файлы и системный мусор ===
+.DS_Store
+*.log
+*.tmp

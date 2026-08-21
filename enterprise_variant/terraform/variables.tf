@@ -23,19 +23,37 @@ terraform {
 variable "yandex_folder_id" {
   type        = string
   default     = "b1gfnin5k6cbrnbsamn0"
-  description = "ID kataloga default v Yandex Cloud"
+  description = "ID каталога в Yandex Cloud"
 }
 
 variable "yandex_service_account_key_file" {
   type        = string
   default     = "authorized_key.json"
-  description = "Put k JSON klyuchu avtorizacii dlya kuruser"
+  description = "Путь к JSON-ключу авторизации сервисного аккаунта"
+}
+
+variable "ssh_public_key" {
+  type        = string
+  default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
+  description = "Публичный SSH-ключ для авторизации на нодах"
+}
+
+variable "ssh_private_key_path" {
+  type        = string
+  default     = "~/.ssh/id_ed25519"
+  description = "Путь к приватному SSH-ключу для туннелей Ansible"
 }
 
 variable "my_home_ip" {
   type        = string
   default     = "0.0.0.0/0"
-  description = "IP-адрес с какого можно подключаться для портов 3000 и 5601, сейчас разрешено всем "
+  description = "IP-адрес/CIDR для доступа к панелям Grafana и Kibana"
+}
+
+variable "ssl_certificate_name" {
+  type        = string
+  default     = "enterprise-alb-ssl-cert-v2"
+  description = "Имя SSL-сертификата в Certificate Manager Yandex Cloud"
 }
 
 provider "yandex" {
