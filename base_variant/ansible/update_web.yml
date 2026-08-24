@@ -8,47 +8,39 @@
     pool_path: "/debian/pool/main/p/prometheus-nginx-exporter"
     file_deb: "/prometheus-nginx-exporter_1.4.1-1+b5_amd64.deb"
     nginx_exporter_download_url: "{{ [prefix_net, host_mirror, pool_path, file_deb] | join('') }}"
-    
+         
     local_ip: "127.0.0.1"
     nginx_port: "80"
     metrics_path: "/stub_status"
     exporter_port: "9113"
-
-    # Confirmed Yandex Mirror path for Filebeat 8.11.3 pool
     fb_folder: "/mirrors/elastic/8/pool/main/f/filebeat/"
     fb_file: "filebeat-8.11.3-amd64.deb"
     filebeat_download_url: "{{ [prefix_net, host_mirror, fb_folder, fb_file] | join('') }}"
-
   tasks:
     - name: Verify PHP-FPM daemon status and activation
       systemd:
         name: php8.4-fpm
         state: started
         enabled: yes
-
     - name: Install Node Exporter package from repository
       apt:
         name: prometheus-node-exporter
         state: present
         update_cache: yes
-
     - name: Enable and restart Node Exporter daemon
       systemd:
         name: prometheus-node-exporter
         state: restarted
         enabled: yes
-
     - name: Download Native Nginx Exporter DEB from Yandex Mirror
       get_url:
         url: "{{ nginx_exporter_download_url }}"
         dest: "/tmp/prometheus-nginx-exporter.deb"
         mode: '0644'
-
     - name: Install Nginx Exporter from downloaded DEB package
       apt:
         deb: "/tmp/prometheus-nginx-exporter.deb"
         state: present
-
     - name: Force configure valid listen flags inside default environment file
       lineinfile:
         path: /etc/default/prometheus-nginx-exporter
@@ -56,39 +48,31 @@
         line: 'ARGS="-nginx.scrape-uri=http://{{ local_ip }}:{{ nginx_port }}{{ metrics_path }} -web.listen-address=:{{ exporter_port }}"'
         create: yes
         mode: '0644'
-
     - name: Inject ARGS parameter support into systemd service unit definition
       lineinfile:
         path: /lib/systemd/system/prometheus-nginx-exporter.service
         regexp: '^ExecStart='
         line: 'ExecStart=/usr/bin/prometheus-nginx-exporter $ARGS'
-
     - name: Reload systemd daemons, enable and force restart prometheus-nginx-exporter
       systemd:
         name: prometheus-nginx-exporter
         state: restarted
         enabled: yes
         daemon_reload: yes
-
     - name: Restart Nginx web server for metrics activation
       systemd:
         name: nginx
         state: restarted
 
-    # --------------------------------------------------------------------------
-    # COMPLIANCE INJECT: AUTOMATED FILEBEAT 8.11.3 DEPLOYMENT VIA YANDEX POOL
-    # --------------------------------------------------------------------------
     - name: Download coherent Filebeat 8.11.3 package from Yandex pool
       get_url:
         url: "{{ filebeat_download_url }}"
         dest: "/tmp/filebeat-8.11.3.deb"
         mode: '0644'
-
     - name: Install Filebeat 8.11.3 package on web servers
       apt:
         deb: "/tmp/filebeat-8.11.3.deb"
         state: present
-
     - name: Generate dynamic Filebeat config aligned with current Elasticsearch IP
       copy:
         dest: /etc/filebeat/filebeat.yml
@@ -102,30 +86,18 @@
             fields:
               type: nginx-logs
             fields_under_root: true
-            # Отключаем автоматический дата-стрим на уровне инпута
-            data_stream.enabled: false
-
-          # Отключаем политику ILM, чтобы Elastic разрешил кастомные индексы
+            
           setup.ilm.enabled: false
           setup.template.name: "nginx-logs"
           setup.template.pattern: "nginx-logs-*"
-
           output.elasticsearch:
             hosts: ["http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
-            # Оставляем авторизацию, если в будущем включите X-Pack
-            username: "elastic"
-            password: "BobkovElasticSecure2026"
-            # Форсируем запись строго в наш именной индекс с маской даты курсовой
             index: "nginx-logs-%{+yyyy.MM.dd}"
-            
+                       
           logging.level: error
         owner: root
         group: root
         mode: '0644'
-
-
-
-
     - name: Force start and enable Filebeat 8.11.3 log shipping agent
       systemd:
         name: filebeat

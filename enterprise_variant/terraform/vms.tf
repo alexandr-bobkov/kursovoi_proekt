@@ -1,28 +1,23 @@
-# АВТОГЕНЕРАЦИЯ SSH КЛЮЧЕЙ
-resource "tls_private_key" "auto_ssh" {
-  algorithm = "ED25519"
-}
-
-resource "local_file" "ssh_private_key" {
-  content         = tls_private_key.auto_ssh.private_key_openssh
-  filename        = "${path.module}/id_ed25519"
-  file_permission = "0600"
-}
-
+# ==============================================================================
+# БАЗОВЫЕ ОБРАЗЫ
+# ==============================================================================
 data "yandex_compute_image" "debian" {
   family = "debian-12"
 }
 
+# ==============================================================================
 # 1. BASTION GATEWAY
+# ==============================================================================
 resource "yandex_compute_instance" "bastion" {
-  name        = "enterprise-bastion"
-  zone        = "ru-central1-a"
-  platform_id = "standard-v3"
-
+  name                      = "enterprise-bastion"
+  zone                      = "ru-central1-a"
+  platform_id               = "standard-v3"
+  allow_stopping_for_update = true
+  
   resources {
     cores         = 2
     memory        = 2
-    core_fraction = 20
+    core_fraction = 50
   }
 
   boot_disk {
@@ -39,20 +34,13 @@ resource "yandex_compute_instance" "bastion" {
   }
 
   metadata = {
-    user-data = <<EOT
-#cloud-config
-users:
-  - name: debian
-    groups: sudo
-    shell: /bin/bash
-    sudo: 'ALL=(ALL) NOPASSWD:ALL'
-    ssh_authorized_keys:
-      - "${tls_private_key.auto_ssh.public_key_openssh}"
-EOT
+    ssh-keys = "debian:${file(var.ssh_public_key_path)}"
   }
 }
 
+# ==============================================================================
 # 2. GRAFANA + PROMETHEUS
+# ==============================================================================
 resource "yandex_compute_instance" "prometheus" {
   name        = "enterprise-grafana-server"
   zone        = "ru-central1-a"
@@ -78,20 +66,13 @@ resource "yandex_compute_instance" "prometheus" {
   }
 
   metadata = {
-    user-data = <<EOT
-#cloud-config
-users:
-  - name: debian
-    groups: sudo
-    shell: /bin/bash
-    sudo: 'ALL=(ALL) NOPASSWD:ALL'
-    ssh_authorized_keys:
-      - "${tls_private_key.auto_ssh.public_key_openssh}"
-EOT
+    ssh-keys = "debian:${file(var.ssh_public_key_path)}"
   }
 }
 
+# ==============================================================================
 # 3. KIBANA SERVER
+# ==============================================================================
 resource "yandex_compute_instance" "kibana_server" {
   name        = "enterprise-kibana-server"
   zone        = "ru-central1-a"
@@ -117,20 +98,13 @@ resource "yandex_compute_instance" "kibana_server" {
   }
 
   metadata = {
-    user-data = <<EOT
-#cloud-config
-users:
-  - name: debian
-    groups: sudo
-    shell: /bin/bash
-    sudo: 'ALL=(ALL) NOPASSWD:ALL'
-    ssh_authorized_keys:
-      - "${tls_private_key.auto_ssh.public_key_openssh}"
-EOT
+    ssh-keys = "debian:${file(var.ssh_public_key_path)}"
   }
 }
 
+# ==============================================================================
 # 4. ELASTICSEARCH STORAGE & DB
+# ==============================================================================
 resource "yandex_compute_instance" "elasticsearch_storage" {
   name        = "enterprise-elasticsearch-storage"
   zone        = "ru-central1-a"
@@ -139,7 +113,7 @@ resource "yandex_compute_instance" "elasticsearch_storage" {
   resources {
     cores         = 2
     memory        = 4
-    core_fraction = 20
+    core_fraction = 50
   }
 
   boot_disk {
@@ -156,20 +130,13 @@ resource "yandex_compute_instance" "elasticsearch_storage" {
   }
 
   metadata = {
-    user-data = <<EOT
-#cloud-config
-users:
-  - name: debian
-    groups: sudo
-    shell: /bin/bash
-    sudo: 'ALL=(ALL) NOPASSWD:ALL'
-    ssh_authorized_keys:
-      - "${tls_private_key.auto_ssh.public_key_openssh}"
-EOT
+    ssh-keys = "debian:${file(var.ssh_public_key_path)}"
   }
 }
 
+# ==============================================================================
 # 5. DYNAMIC INSTANCE GROUP
+# ==============================================================================
 resource "yandex_iam_service_account" "ig_sa" {
   name = "enterprise-ig-service-account"
 }
@@ -209,16 +176,7 @@ resource "yandex_compute_instance_group" "web_group" {
     }
 
     metadata = {
-      user-data = <<EOT
-#cloud-config
-users:
-  - name: debian
-    groups: sudo
-    shell: /bin/bash
-    sudo: 'ALL=(ALL) NOPASSWD:ALL'
-    ssh_authorized_keys:
-      - "${tls_private_key.auto_ssh.public_key_openssh}"
-EOT
+      ssh-keys = "debian:${file(var.ssh_public_key_path)}"
     }
   }
 
@@ -251,7 +209,9 @@ EOT
   depends_on = [yandex_resourcemanager_folder_iam_member.ig_editor]
 }
 
+# ==============================================================================
 # 6. INVENTORY
+# ==============================================================================
 resource "local_file" "ansible_inventory" {
   filename = "${path.module}/../ansible/hosts.ini"
   content  = <<EOT
@@ -282,12 +242,13 @@ logging_storage
 web_nodes
 
 [internal:vars]
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyJump=debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyJump=debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} -o ControlMaster=no'
 EOT
-  depends_on = [local_file.ssh_private_key]
 }
 
+# ==============================================================================
 # 7. SNAPSHOT SCHEDULE
+# ==============================================================================
 resource "yandex_compute_snapshot_schedule" "enterprise_backup" {
   name = "enterprise-global-snapshot-schedule"
 
@@ -305,24 +266,25 @@ resource "yandex_compute_snapshot_schedule" "enterprise_backup" {
   ]
 }
 
+# ==============================================================================
 # 8. АВТОМАТИЧЕСКИЙ ЗАПУСК ANSIBLE ПОСЛЕ ДЕПЛОЯ
+# ==============================================================================
 resource "null_resource" "run_ansible" {
-  # Триггер срабатывает каждый раз, когда пересоздается инвентарь
   triggers = {
     inventory_id = local_file.ansible_inventory.id
   }
 
-  # Ждем, пока сгенерируется hosts.ini и поднимутся все ВМ
   depends_on = [
     local_file.ansible_inventory,
     yandex_compute_instance.bastion,
     yandex_compute_instance.kibana_server,
     yandex_compute_instance.prometheus,
     yandex_compute_instance.elasticsearch_storage,
-    yandex_compute_instance_group.web_group
+    yandex_compute_instance_group.web_group,
+    yandex_vpc_gateway.nat_gateway,         
+    yandex_alb_load_balancer.web_balancer
   ]
 
-  # Выполняем bash-скрипт на вашем локальном компьютере
   provisioner "local-exec" {
     command = "bash ${path.module}/run_ansible.sh"
   }

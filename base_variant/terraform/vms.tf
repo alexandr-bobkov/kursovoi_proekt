@@ -243,7 +243,9 @@ resource "null_resource" "ansible_auto_run" {
     yandex_compute_instance.web_1,
     yandex_compute_instance.web_2,
     yandex_compute_instance.prometheus,
-    yandex_compute_instance.opensearch
+    yandex_compute_instance.opensearch,
+    yandex_vpc_gateway.nat_gateway,       # <--- ДОБАВИТЬ
+    yandex_alb_load_balancer.web_alb
   ]
 
     # Шаг А: Создание hosts.ini 

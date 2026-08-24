@@ -1,5 +1,5 @@
 # ==============================================================================
-# APPLICATION LOAD BALANCER (L7 HTTPS ПОРТ 443)
+# APPLICATION LOAD BALANCER (L7 HTTPS ПОРТ 443 + HTTP РЕДИРЕКТ)
 # ==============================================================================
 resource "yandex_vpc_address" "web_balancer_ip" {
   name = "enterprise-web-balancer-ip"
@@ -51,7 +51,7 @@ resource "yandex_alb_virtual_host" "web_virtual_host" {
 resource "yandex_alb_load_balancer" "web_balancer" {
   name               = "enterprise-web-balancer"
   network_id         = yandex_vpc_network.main_vpc.id
-  security_group_ids = [yandex_vpc_security_group.alb_sg.id]
+  security_group_ids = [yandex_vpc_security_group.alb_sg.id] # Обязательная привязка SG
 
   allocation_policy {
     location {
@@ -64,6 +64,25 @@ resource "yandex_alb_load_balancer" "web_balancer" {
     }
   }
 
+  # --- НОВЫЙ БЛОК: Слушаем 80 порт и автоматически кидаем на 443 ---
+  listener {
+    name = "http-redirect-listener"
+    endpoint {
+      address {
+        external_ipv4_address {
+          address = yandex_vpc_address.web_balancer_ip.external_ipv4_address.0.address
+        }
+      }
+      ports = [80]
+    }
+    http {
+      redirects {
+        http_to_https = true
+      }
+    }
+  }
+
+  # --- ВАШ СТАРЫЙ БЛОК: Слушаем 443 порт с SSL-сертификатом ---
   listener {
     name = "https-listener"
     endpoint {

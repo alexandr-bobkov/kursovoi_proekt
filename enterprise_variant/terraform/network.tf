@@ -56,12 +56,12 @@ resource "yandex_vpc_security_group" "alb_sg" {
     port           = 443
   }
   
-  # ВАЖНО: Внутренние хелсчеки самого балансировщика ALB от Яндекс.Облака
+  # Внутренние хелсчеки самого балансировщика ALB от Яндекс.Облака (БЕЗ ХАРДКОДА)
   ingress {
-    protocol       = "TCP"
-    description    = "Allow ALB health checks"
-    v4_cidr_blocks = ["198.18.235.0/24", "198.18.248.0/24"]
-    port           = 30080
+    protocol          = "TCP"
+    description       = "Allow ALB health checks"
+    predefined_target = "loadbalancer_healthchecks"
+    port              = 30080
   }
 
   # Исходящий трафик (разрешаем балансировщику отвечать клиентам и общаться с бекендом)
@@ -71,7 +71,6 @@ resource "yandex_vpc_security_group" "alb_sg" {
   }
 }
 
-# ИСПРАВЛЕНО: Группа безопасности для Бастиона теперь разрешает ответы во внешний интернет
 resource "yandex_vpc_security_group" "bastion_sg" {
   name       = "bastion-security-group"
   network_id = yandex_vpc_network.main_vpc.id
@@ -146,6 +145,7 @@ resource "yandex_vpc_security_group" "web_sg" {
   name       = "web-servers-security-group"
   network_id = yandex_vpc_network.main_vpc.id
 
+  # --- ПРАВИЛА ДЛЯ ПОРТА 80 (HTTP) ---
   ingress {
     protocol          = "TCP"
     description       = "Разрешить HTTP от ALB"
@@ -154,16 +154,38 @@ resource "yandex_vpc_security_group" "web_sg" {
   }
   ingress {
     protocol       = "TCP"
-    description    = "Разрешить хелсчеки и трафик из публичных подсетей ALB"
+    description    = "Разрешить хелсчеки и трафик из публичных подсетей ALB (HTTP)"
     v4_cidr_blocks = concat(yandex_vpc_subnet.public_a.v4_cidr_blocks, yandex_vpc_subnet.public_b.v4_cidr_blocks)
     port           = 80
   }
   ingress {
-    protocol       = "TCP"
-    description    = "Разрешить внутренние хелсчеки Yandex ALB"
-    v4_cidr_blocks = ["198.18.235.0/24", "198.18.248.0/24"]
-    port           = 80
+    protocol          = "TCP"
+    description       = "Разрешить внутренние хелсчеки Yandex ALB (HTTP)"
+    predefined_target = "loadbalancer_healthchecks"
+    port              = 80
   }
+
+  # --- ПРАВИЛА ДЛЯ ПОРТА 443 (HTTPS) ---
+  ingress {
+    protocol          = "TCP"
+    description       = "Разрешить HTTPS от ALB"
+    security_group_id = yandex_vpc_security_group.alb_sg.id
+    port              = 443
+  }
+  ingress {
+    protocol       = "TCP"
+    description    = "Разрешить хелсчеки и трафик из публичных подсетей ALB (HTTPS)"
+    v4_cidr_blocks = concat(yandex_vpc_subnet.public_a.v4_cidr_blocks, yandex_vpc_subnet.public_b.v4_cidr_blocks)
+    port           = 443
+  }
+  ingress {
+    protocol          = "TCP"
+    description       = "Разрешить внутренние хелсчеки Yandex ALB (HTTPS)"
+    predefined_target = "loadbalancer_healthchecks"
+    port              = 443
+  }
+
+  # --- ОСТАЛЬНЫЕ ПРАВИЛА ---
   ingress {
     protocol          = "TCP"
     description       = "Разрешить SSH с Bastion"

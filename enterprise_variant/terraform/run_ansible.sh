@@ -22,22 +22,15 @@ fi
 
 echo "=== [DevOps Auto-Pilot] Запуск пайплайна развертывания ==="
 
-# Динамически достаем IP бастиона из свежего hosts.ini
-BASTION_IP=$(grep 'bastion_host' hosts.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-
-# Умное ожидание вместо слепого sleep 60
-echo "--> [Этап 1/3] Ожидание инициализации SSH (порт 22) на Бастионе ($BASTION_IP)..."
-until nc -z -w 5 "$BASTION_IP" 22 2>/dev/null; do
-    echo "    [Ожидание] cloud-init еще настраивает виртуалку, ждем 10 секунд..."
-    sleep 10
-done
+echo "--> [Этап 1/3] Ожидание готовности Бастиона..."
+ansible bastion -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10"
 echo "=== [OK] Бастион поднялся и готов принимать подключения! ==="
 
-echo "--> [Этап 2/3] Ожидание готовности баз данных и логирования (через ProxyJump)..."
-ansible kibana_host,grafana_host,logging_storage -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 2
+echo "--> [Этап 2/3] Ожидание готовности баз данных и логирования (через ProxyJump параллельно)..."
+ansible kibana_host,grafana_host,logging_storage -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 5
 
-echo "--> [Этап 3/3] Ожидание готовности веб-нод (через ProxyJump)..."
-ansible web_nodes -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 2
+echo "--> [Этап 3/3] Ожидание готовности веб-нод (через ProxyJump параллельно)..."
+ansible web_nodes -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 5
 
 echo "=== [OK] Все серверы готовы к конфигурированию! ==="
 echo "=============================================================================="
