@@ -1,20 +1,10 @@
 # ==============================================================================
-# СЕТЕВАЯ ТОПОЛОГИЯ CLOUD VPC И КОНФИГУРАЦИЯ ПОДСЕТЕЙ С ТАБЛИЦЕЙ МАРШРУТОВ
+# СЕТЕВАЯ ТОПОЛОГИЯ CLOUD VPC И ПОДСЕТИ
 # ==============================================================================
-
 resource "yandex_vpc_network" "main_vpc" {
   name = "enterprise-main-vpc"
 }
 
-# Резервирование внешнего статического IP-адреса для балансировщика трафика (ALB)
-resource "yandex_vpc_address" "alb_address" {
-  name = "static-balancer-address"
-  external_ipv4_address {
-    zone_id = "ru-central1-a"
-  }
-}
-
-# --- КОНФИГУРАЦИЯ ПОДСЕТЕЙ КОНТУРА ---
 resource "yandex_vpc_subnet" "public_a" {
   name           = "enterprise-public-subnet-a"
   zone           = "ru-central1-a"
@@ -46,65 +36,75 @@ resource "yandex_vpc_subnet" "private_b" {
 }
 
 # ==============================================================================
-# МЕЖСЕТЕВОЙ ЭКРАН СТРОГОГО РЕЖИМА ENTERPRISE (ZERO TRUST SECURITY GROUPS)
+# ГРУППЫ БЕЗОПАСНОСТИ (ZERO TRUST SECURITY GROUPS)
 # ==============================================================================
-
-# 1. Группа Балансировщика (ALB) - Открыт только внешнему миру на веб-порты
 resource "yandex_vpc_security_group" "alb_sg" {
   name       = "security-group-load-balancer"
   network_id = yandex_vpc_network.main_vpc.id
-  
+
+  # Входящий HTTP от клиентов
   ingress {
     protocol       = "TCP"
     v4_cidr_blocks = ["0.0.0.0/0"]
     port           = 80
   }
+  
+  # Входящий HTTPS от клиентов
   ingress {
     protocol       = "TCP"
     v4_cidr_blocks = ["0.0.0.0/0"]
     port           = 443
   }
   
-  # Балансировщик может слать трафик только в приватные подсети веб-нод бэкенда
-  egress {
+  # ВАЖНО: Внутренние хелсчеки самого балансировщика ALB от Яндекс.Облака
+  ingress {
     protocol       = "TCP"
-    v4_cidr_blocks = concat(yandex_vpc_subnet.private_a.v4_cidr_blocks, yandex_vpc_subnet.private_b.v4_cidr_blocks)
-    port           = 80
+    description    = "Allow ALB health checks"
+    v4_cidr_blocks = ["198.18.235.0/24", "198.18.248.0/24"]
+    port           = 30080
+  }
+
+  # Исходящий трафик (разрешаем балансировщику отвечать клиентам и общаться с бекендом)
+  egress {
+    protocol       = "ANY"
+    v4_cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# 2. Группа Бастион-хоста - Внешний доступ по SSH для администратора
+# ИСПРАВЛЕНО: Группа безопасности для Бастиона теперь разрешает ответы во внешний интернет
 resource "yandex_vpc_security_group" "bastion_sg" {
   name       = "bastion-security-group"
   network_id = yandex_vpc_network.main_vpc.id
   
+  # Входящий SSH со всего интернета
   ingress {
     protocol       = "TCP"
     v4_cidr_blocks = ["0.0.0.0/0"]
     port           = 22
   }
-  # Разрешаем Бастиону SSH-доступ ко всему внутреннему VPC пространства
+
+  # Исходящий трафик: разрешаем любые ответы клиентам и доступ к серверам внутри
   egress {
-    protocol       = "TCP"
-    v4_cidr_blocks = ["10.100.0.0/16"]
-    port           = 22
+    protocol       = "ANY"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+    from_port      = 0
+    to_port        = 65535
   }
 }
 
-# 3. Группа сервера Grafana & Prometheus (Внешний доступ открыт для проверки)
 resource "yandex_vpc_security_group" "grafana_sg" {
   name       = "grafana-security-group"
   network_id = yandex_vpc_network.main_vpc.id
   
   ingress {
     protocol       = "TCP"
-    description    = "Allow Grafana Web UI for global inspection"
-    v4_cidr_blocks = ["0.0.0.0/0"] 
+    description    = "Разрешить доступ к веб-интерфейсу Grafana"
+    v4_cidr_blocks = ["0.0.0.0/0"]
     port           = 3000
   }
   ingress {
     protocol          = "TCP"
-    description       = "Allow management SSH from Bastion ONLY"
+    description       = "Разрешить SSH с Bastion"
     security_group_id = yandex_vpc_security_group.bastion_sg.id
     port              = 22
   }
@@ -113,81 +113,72 @@ resource "yandex_vpc_security_group" "grafana_sg" {
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
 }
-# 4. Группа интерфейса логов Kibana (Внешний доступ открыт для проверки)
+
 resource "yandex_vpc_security_group" "kibana_sg" {
   name       = "kibana-security-group"
   network_id = yandex_vpc_network.main_vpc.id
   
   ingress {
     protocol       = "TCP"
-    description    = "Allow Kibana Web UI for global inspection"
-    v4_cidr_blocks = ["0.0.0.0/0"] # разрешаем подключение с любого внешнего ip можно указать конкретный адрес
+    description    = "Разрешить доступ к веб-интерфейсу Kibana"
+    v4_cidr_blocks = ["0.0.0.0/0"]
     port           = 5601
   }
   ingress {
     protocol          = "TCP"
-    description       = "Allow management SSH from Bastion ONLY"
+    description       = "Разрешить SSH с Bastion"
     security_group_id = yandex_vpc_security_group.bastion_sg.id
     port              = 22
   }
-  
-  # Разрешаем Prometheus собирать метрики железа с ноды Кибаны
   ingress {
     protocol       = "TCP"
-    description    = "Allow Prometheus to scrape internal Kibana node metrics"
+    description    = "Разрешить сбор метрик Prometheus"
     v4_cidr_blocks = ["10.100.0.0/16"]
     port           = 9100
   }
-
   egress {
     protocol       = "ANY"
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# 5. Группа Веб-серверов бэкенда (Dynamic Instance Group)
 resource "yandex_vpc_security_group" "web_sg" {
   name       = "web-servers-security-group"
   network_id = yandex_vpc_network.main_vpc.id
 
   ingress {
     protocol          = "TCP"
-    description       = "Allow HTTP traffic from ALB SG ONLY"
+    description       = "Разрешить HTTP от ALB"
     security_group_id = yandex_vpc_security_group.alb_sg.id
     port              = 80
   }
-  
   ingress {
     protocol       = "TCP"
-    description    = "Allow Healthchecks and Traffic from ALB Public Subnets"
+    description    = "Разрешить хелсчеки и трафик из публичных подсетей ALB"
     v4_cidr_blocks = concat(yandex_vpc_subnet.public_a.v4_cidr_blocks, yandex_vpc_subnet.public_b.v4_cidr_blocks)
     port           = 80
   }
-
   ingress {
     protocol       = "TCP"
-    description    = "Allow Yandex ALB Internal Healthchecks via Service IPs"
+    description    = "Разрешить внутренние хелсчеки Yandex ALB"
     v4_cidr_blocks = ["198.18.235.0/24", "198.18.248.0/24"]
     port           = 80
   }
   ingress {
     protocol          = "TCP"
-    description       = "Allow management SSH from Bastion SG ONLY"
+    description       = "Разрешить SSH с Bastion"
     security_group_id = yandex_vpc_security_group.bastion_sg.id
     port              = 22
   }
-  
-  # Сбор метрик Node Exporter разрешен для всего интранета
   ingress {
     protocol       = "TCP"
-    description    = "Allow Node Exporter metrics scraping from VPC"
+    description    = "Разрешить сбор метрик Node Exporter"
     v4_cidr_blocks = ["10.100.0.0/16"]
     port           = 9100
   }
-  # Сбор метрик Nginx Exporter разрешен для всего интранета
   ingress {
     protocol       = "TCP"
-    description    = "Allow Nginx Exporter metrics scraping from VPC"
+    description    = "Разрешить сбор метрик Nginx Exporter"
     v4_cidr_blocks = ["10.100.0.0/16"]
     port           = 9113
   }
@@ -197,41 +188,34 @@ resource "yandex_vpc_security_group" "web_sg" {
   }
 }
 
-# 6. Группа Изолированной базы логов и данных (Elasticsearch & СУБД Стенда)
 resource "yandex_vpc_security_group" "internal_mgmt_sg" {
   name       = "internal-management-security-group"
   network_id = yandex_vpc_network.main_vpc.id
 
   ingress {
     protocol          = "TCP"
-    description       = "Allow SSH from Bastion ONLY"
+    description       = "Разрешить SSH с Bastion"
     security_group_id = yandex_vpc_security_group.bastion_sg.id
     port              = 22
   }
-
-  # ИСПРАВЛЕНО: Открыт интранет-доступ к Elasticsearch для Filebeat со всех подсетей
   ingress {
     protocol       = "TCP"
-    description    = "Allow Elasticsearch queries from Kibana and Filebeat via VPC"
+    description    = "Разрешить запросы Elasticsearch внутри VPC"
     v4_cidr_blocks = ["10.100.0.0/16"]
     port           = 9200
   }
-  
   ingress {
     protocol       = "TCP"
-    description    = "Allow Managed PostgreSQL cluster connections from internal VPC"
+    description    = "Разрешить подключения к PostgreSQL внутри VPC"
     v4_cidr_blocks = ["10.100.0.0/16"]
     port           = 5432
   }
-
-  # Разрешаем Prometheus собирать метрики железа с ноды баз данных и логов
   ingress {
     protocol       = "TCP"
-    description    = "Allow Prometheus to scrape internal database node metrics"
+    description    = "Разрешить сбор метрик Prometheus"
     v4_cidr_blocks = ["10.100.0.0/16"]
     port           = 9100
   }
-
   egress {
     protocol       = "ANY"
     v4_cidr_blocks = ["0.0.0.0/0"]
@@ -239,7 +223,7 @@ resource "yandex_vpc_security_group" "internal_mgmt_sg" {
 }
 
 # ==============================================================================
-# NAT-ШЛЮЗ ДЛЯ ВЫХОДА ПРИВАТНЫХ НОД В ИНТЕРНЕТ И ТАБЛИЦА МАРШРУТИЗАЦИИ
+# NAT-ШЛЮЗ ДЛЯ ПРИВАТНЫХ ПОДСЕТЕЙ
 # ==============================================================================
 resource "yandex_vpc_gateway" "nat_gateway" {
   name = "enterprise-nat-gateway"

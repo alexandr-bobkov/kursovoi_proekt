@@ -1,106 +1,38 @@
 ---
-# ==============================================================================
-# 4. ДЕПЛОЙ СТЕКА АНАЛИТИКИ GRAFANA, PROMETHEUS И GO-АДАПТЕРА CRUNCHYDATA
-# ==============================================================================
-- name: "Deploy Grafana Analytics & PostgreSQL Adapter Stack"
+- name: "Шаг 4: Развертывание Grafana и Prometheus"
   hosts: grafana_host
   become: true
   vars_files:
     - secrets.yml
   vars:
-    # Базовые рабочие каталоги на хосте
     g_dir: "/opt/grafana"
     p_dir: "/opt/prometheus"
-    adapter_work_dir: "/opt/prometheus-adapter"
-
-    # Сетевая топология сервисов контура мониторинга
-    adapter_host: "127.0.0.1"
-    adapter_port: "9201"
-    prometheus_self_port: "9090"
-    node_exporter_port: "9100"
-    nginx_exporter_port: "9113"
-
-    # Безопасность веб-панелей управления
-    adapter_image_tag: "0.9.0"
-
-    # АТОМАРНЫЙ ВЫНОС ССЫЛКИ GIT ДЛЯ ЗАЩИТЫ ОТ ОБРЕЗКИ
-    git_base_domain: "https://github.com"
-    git_owner_org: "CrunchyData"
-    git_repo_name: "postgresql-prometheus-adapter"
-    crunchy_git_url: "{{ git_base_domain }}/{{ git_owner_org }}/{{ git_repo_name }}.git"
-
-    # ПРЯМЫЕ ПОЛНЫЕ ССЫЛКИ ДЛЯ СКАЧИВАНИЯ ДАШБОРДОВ GRAFANA API
-    grafana_api_base: "https://grafana.com"
-    dash_node_exporter_url: "{{ grafana_api_base }}/api/dashboards/1860/revisions/37/download"
-    dash_nginx_exporter_url: "{{ grafana_api_base }}/api/dashboards/12708/revisions/1/download"
-
-    # АВТОМАТИЗАЦИЯ: нативно вытаскиваем IP из группы [logging_storage] в hosts.ini
-    postgres_db_host: "{{ hostvars[groups['logging_storage'] | first]['ansible_host'] | default('127.0.0.1') }}"
-    postgres_db_port: 5432
-    postgres_db_user: "crunchy_admin"
-    postgres_db_password: "BobkovPostgresSecure2026"
-    postgres_db_name: "metricsdb"
-
-    # Автоматическая склейка строки подключения без хардкода
-    postgres_db_url: "user={{ postgres_db_user }} password={{ postgres_db_password }} host={{ postgres_db_host }} port={{ postgres_db_port }} database={{ postgres_db_name }} sslmode=disable"
 
   tasks:
-    # 1. УСТАНОВКА ЗАВИСИМОСТЕЙ И ПАКЕТОВ НА ХОСТ С УЧЕТОМ DEBIAN 13
-    - name: "Install Core Packages from Debian 13 Main Repository"
-      ansible.builtin.apt:
-        name: 
-          - docker.io
-          - python3-docker
-          - jq
-          - git
-        state: present
-        update_cache: yes
-
-    # 2. ПОДГОТОВКА СТРУКТУРЫ ДИРЕКТОРИЙ ОВНЕРСТВА
-    - name: "Create Workspace Directories"
+    - name: "Создание базовых директорий"
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: "0755"
+        mode: "0777"
       loop:
         - "{{ p_dir }}"
         - "{{ p_dir }}/data"
+        - "{{ g_dir }}"
+        - "{{ g_dir }}/provisioning"
         - "{{ g_dir }}/provisioning/datasources"
         - "{{ g_dir }}/provisioning/dashboards"
-        - "{{ adapter_work_dir }}"
 
-    - name: "Set correct ownership for Grafana workspace"
-      ansible.builtin.file:
-        path: "{{ g_dir }}"
-        owner: "472"
-        group: "472"
-        recurse: yes
-        mode: "0750"
-
-    - name: "Set correct ownership for Prometheus data directory"
-      ansible.builtin.file:
-        path: "{{ p_dir }}/data"
-        owner: "nobody"
-        group: "nogroup"
-        mode: "0750"
-
-    # 3. ГЕНЕРАЦИЯ ПРОФИЛЕЙ И КОНФИГУРАЦИЙ МОНИТОРИНГА (ЧИСТЫЙ СТАТИЧЕСКИЙ YAML)
-    - name: "Generate Advanced prometheus.yml config"
+    - name: "Генерация конфигурации Prometheus"
       ansible.builtin.copy:
         dest: "{{ p_dir }}/prometheus.yml"
         content: |
           global:
             scrape_interval: 15s
 
-          remote_write:
-            - url: "http://{{ adapter_host }}:{{ adapter_port }}/write"
-          remote_read:
-            - url: "http://{{ adapter_host }}:{{ adapter_port }}/read"
-
           scrape_configs:
             - job_name: 'prometheus_self'
               static_configs:
-                - targets: ['localhost:{{ prometheus_self_port }}']
+                - targets: ['localhost:9090']
 
             - job_name: 'node_exporter'
               file_sd_configs:
@@ -111,47 +43,62 @@
               file_sd_configs:
                 - files:
                     - '/etc/prometheus/targets_nginx.json'
+
+            - job_name: 'postgres_exporter'
+              file_sd_configs:
+                - files:
+                    - '/etc/prometheus/targets_postgres.json'
         mode: '0644'
 
-    # JSON-КАРТА 1: Системные метрики железа для всех серверов контура
-    - name: "Generate Dynamic JSON Targets mapping for all nodes"
+    - name: "Генерация динамических целей для Node Exporter"
       ansible.builtin.copy:
         dest: "{{ p_dir }}/targets.json"
         content: |
-          [
+          {% set targets_list = [] %}
           {% for host in groups['all'] %}
-          {% if hostvars[host]['ansible_host'] is defined %}
-          {
-            "targets": ["{{ hostvars[host]['ansible_host'] }}:9100"],
-            "labels": {
-              "instance": "{{ host }}"
-            }
-          }{% if not loop.last %},{% endif %}
-          {% endif %}
+            {% if hostvars[host]['ansible_host'] is defined and host != 'bastion_host' %}
+              {% set _ = targets_list.append({
+                "targets": [ hostvars[host]['ansible_host'] ~ ':9100' ],
+                "labels": { "instance": host }
+              }) %}
+            {% endif %}
           {% endfor %}
-          ]
+          {{ targets_list | to_nice_json }}
         mode: '0644'
 
-    # JSON-КАРТА 2: Сетевые метрики веб-нод Nginx
-    - name: "Generate Dynamic JSON Targets mapping for Nginx nodes"
+    - name: "Генерация динамических целей для Nginx Exporter"
       ansible.builtin.copy:
         dest: "{{ p_dir }}/targets_nginx.json"
         content: |
-          [
+          {% set nginx_targets = [] %}
           {% for host in groups['web_nodes'] %}
-          {% if hostvars[host]['ansible_host'] is defined %}
-          {
-            "targets": ["{{ hostvars[host]['ansible_host'] }}:9113"],
-            "labels": {
-              "instance": "{{ host }}"
-            }
-          }{% if not loop.last %},{% endif %}
-          {% endif %}
+            {% if hostvars[host]['ansible_host'] is defined %}
+              {% set _ = nginx_targets.append({
+                "targets": [ hostvars[host]['ansible_host'] ~ ':9113' ],
+                "labels": { "instance": host }
+              }) %}
+            {% endif %}
           {% endfor %}
-          ]
+          {{ nginx_targets | to_nice_json }}
         mode: '0644'
 
-    - name: "Write Grafana DataSource Provisioning profile"
+    - name: "Генерация динамических целей для PostgreSQL Exporter (pg-adapter)"
+      ansible.builtin.copy:
+        dest: "{{ p_dir }}/targets_postgres.json"
+        content: |
+          {% set pg_targets = [] %}
+          {% for host in groups['logging_storage'] %}
+            {% if hostvars[host]['ansible_host'] is defined %}
+              {% set _ = pg_targets.append({
+                "targets": [ hostvars[host]['ansible_host'] ~ ':9187' ],
+                "labels": { "instance": host }
+              }) %}
+            {% endif %}
+          {% endfor %}
+          {{ pg_targets | to_nice_json }}
+        mode: '0644'
+
+    - name: "Настройка подключения источника данных для Grafana"
       ansible.builtin.copy:
         dest: "{{ g_dir }}/provisioning/datasources/ds.yml"
         content: |
@@ -160,11 +107,11 @@
             - name: "prometheus"
               type: "prometheus"
               access: "proxy"
-              url: "http://127.0.0.1:{{ prometheus_self_port }}"
+              url: "http://127.0.0.1:9090"
               isDefault: true
         mode: '0644'
 
-    - name: "Write Grafana Dashboards Provider profile"
+    - name: "Настройка провайдера дашбордов Grafana"
       ansible.builtin.copy:
         dest: "{{ g_dir }}/provisioning/dashboards/dash.yml"
         content: |
@@ -179,115 +126,34 @@
               options:
                 path: /etc/grafana/provisioning/dashboards
         mode: '0644'
-    # 4. СКАЧИВАНИЕ И ОПТИМИЗАЦИЯ ДАШБОРДОВ В СИСТЕМУ
-    - name: "Download Dashboard 1860 (Node Exporter Full)"
+
+    - name: "Загрузка дашборда Node Exporter (1860)"
       ansible.builtin.get_url:
-        url: "{{ dash_node_exporter_url }}"
+        url: "https://grafana.com/api/dashboards/1860/revisions/37/download"
         dest: "/tmp/node_exporter_full.json"
         mode: '0644'
-
-    - name: "Download Dashboard 12708 (Nginx Exporter)"
-      ansible.builtin.get_url:
-        url: "{{ dash_nginx_exporter_url }}"
-        dest: "/tmp/nginx_exporter.json"
-        mode: '0644'
-
-    - name: "Patch DataSource names in dashboards using Ansible replace"
-      ansible.builtin.replace:
-        path: "/tmp/node_exporter_full.json"
-        regexp: '\$\{DS_PROMETHEUS\}'
-        replace: 'prometheus'
-
-    - name: "Copy patched Node Exporter dashboard"
-      ansible.builtin.copy:
-        src: "/tmp/node_exporter_full.json"
-        dest: "{{ g_dir }}/provisioning/dashboards/node_exporter_patched.json"
-        remote_src: yes
-        mode: '0644'
-        owner: "472"
-        group: "472"
-
-    - name: "Patch DataSource names in Nginx dashboard"
-      ansible.builtin.replace:
-        path: "/tmp/nginx_exporter.json"
-        regexp: '\$\{DS_PROMETHEUS\}'
-        replace: 'prometheus'
-
-    - name: "Copy patched Nginx Exporter dashboard"
-      ansible.builtin.copy:
-        src: "/tmp/nginx_exporter.json"
-        dest: "{{ g_dir }}/provisioning/dashboards/nginx_exporter_patched.json"
-        remote_src: yes
-        mode: '0644'
-        owner: "472"
-        group: "472"
-
-    - name: "Ensure PostgreSQL is reachable before starting adapter"
-      ansible.builtin.wait_for:
-        host: "{{ postgres_db_host }}"
-        port: "{{ postgres_db_port }}"
-        timeout: 90
-        connect_timeout: 5
       ignore_errors: yes
 
-    # ==============================================================================
-    # 5. ИСПОЛНЕНИЕ ТЗ: МНОГОЭТАПНАЯ ИЗОЛИРОВАННАЯ СБОРКА АДАПТЕРА
-    # ==============================================================================
-    - name: "Clone official CrunchyData adapter repository from ТЗ"
-      ansible.builtin.git:
-        repo: "{{ crunchy_git_url }}"
-        dest: "{{ adapter_work_dir }}"
-        version: "main"
-        force: yes
-
-    - name: "Force purge any pre-compiled host binaries to kill GLIBC bug"
-      ansible.builtin.file:
-        path: "{{ adapter_work_dir }}/postgresql-prometheus-adapter"
-        state: absent
-
-    - name: "Generate indestructible Multi-stage Dockerfile inside workspace"
-      ansible.builtin.copy:
-        dest: "{{ adapter_work_dir }}/Dockerfile"
-        content: |
-          FROM golang:1.21-alpine AS builder
-          WORKDIR /app
-          COPY . .
-          RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o postgresql-prometheus-adapter main.go
-
-          FROM alpine:3.18
-          RUN apk --no-cache add ca-certificates tzdata
-          WORKDIR /
-          COPY --from=builder /app/postgresql-prometheus-adapter /postgresql-prometheus-adapter
-          ENTRYPOINT ["/postgresql-prometheus-adapter"]
+    - name: "Загрузка дашборда Nginx Exporter (12708)"
+      ansible.builtin.get_url:
+        url: "https://grafana.com/api/dashboards/12708/revisions/1/download"
+        dest: "/tmp/nginx_exporter.json"
         mode: '0644'
+      ignore_errors: yes
 
-    - name: "Build CrunchyData Adapter Image locally via Multi-stage Build"
-      community.docker.docker_image:
-        build:
-          path: "{{ adapter_work_dir }}"
-          nocache: no
-        name: "crunchydata/postgresql-prometheus-adapter"
-        tag: "{{ adapter_image_tag }}"
-        source: build
-        state: present
+    - name: "Патчинг и размещение дашбордов"
+      ansible.builtin.shell: |
+        if [ -f /tmp/node_exporter_full.json ]; then
+          sed -i 's/${DS_PROMETHEUS}/prometheus/g' /tmp/node_exporter_full.json
+          cp /tmp/node_exporter_full.json {{ g_dir }}/provisioning/dashboards/node_exporter.json
+        fi
+        if [ -f /tmp/nginx_exporter.json ]; then
+          sed -i 's/${DS_PROMETHEUS}/prometheus/g' /tmp/nginx_exporter.json
+          cp /tmp/nginx_exporter.json {{ g_dir }}/provisioning/dashboards/nginx_exporter.json
+        fi
+      changed_when: false
 
-    - name: "Launch CrunchyData PostgreSQL Prometheus Adapter"
-      community.docker.docker_container:
-        name: postgresql-prometheus-adapter
-        image: "crunchydata/postgresql-prometheus-adapter:{{ adapter_image_tag }}"
-        restart_policy: always
-        network_mode: host
-        env:
-          DATABASE_URL: "{{ postgres_db_url }}"
-
-    # 6. ОРКЕСТРАЦИЯ ОСТАЛЬНЫХ СЕРВИСОВ МОНИТОРИНГА
-    - name: "Pull Prometheus image"
-      community.docker.docker_image:
-        name: "prom/prometheus:v2.45.0"
-        source: pull
-        state: present
-
-    - name: "Launch Prometheus Container"
+    - name: "Запуск контейнера Prometheus"
       community.docker.docker_container:
         name: prometheus-server
         image: "prom/prometheus:v2.45.0"
@@ -297,35 +163,30 @@
           - "{{ p_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
           - "{{ p_dir }}/targets.json:/etc/prometheus/targets.json:ro"
           - "{{ p_dir }}/targets_nginx.json:/etc/prometheus/targets_nginx.json:ro"
+          - "{{ p_dir }}/targets_postgres.json:/etc/prometheus/targets_postgres.json:ro"
           - "{{ p_dir }}/data:/prometheus"
         command:
           - "--config.file=/etc/prometheus/prometheus.yml"
           - "--storage.tsdb.path=/prometheus"
           - "--web.enable-lifecycle"
 
-    - name: "Pull Grafana Enterprise image"
-      community.docker.docker_image:
-        name: "grafana/grafana-enterprise:10.2.3"
-        source: pull
-        state: present
-
-    - name: "Launch Grafana Container"
+    - name: "Запуск контейнера Grafana"
       community.docker.docker_container:
         name: grafana-server
         image: "grafana/grafana-enterprise:10.2.3"
         restart_policy: always
         network_mode: host
-        user: "472"
+        user: "0"
         env:
-          GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password }}"
+          GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password | default('BobkovDevOps2026') }}"
           GF_PATHS_PROVISIONING: "/etc/grafana/provisioning"
         volumes:
           - "{{ g_dir }}/provisioning:/etc/grafana/provisioning"
 
-    - name: "Wait for Core Engine Network Sockets Readiness"
+    - name: "Ожидание готовности Prometheus и Grafana"
       ansible.builtin.wait_for:
         port: "{{ item }}"
-        timeout: 45
+        timeout: 60
       loop:
-        - "{{ prometheus_self_port }}"
+        - 9090
         - 3000

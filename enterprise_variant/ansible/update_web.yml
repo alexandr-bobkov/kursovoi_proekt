@@ -1,219 +1,170 @@
 ---
-- name: "Configure Scalable Web Nodes Backend Stack"
-  hosts: all
+- name: "Шаг 3: Настройка веб-узлов кластера"
+  hosts: web_nodes
   become: true
-  vars:
-    # Безопасный атомарный вынос адреса для защиты от урезок и сокращений строк
-    local_loopback_ip: "127.0.0.1"
-    nginx_status_path: "nginx_status"
-    nginx_scrape_endpoint: "http://{{ local_loopback_ip }}:80/{{ nginx_status_path }}"
-
   tasks:
-    # 1. Установка ядра Docker на чистую Debian 13 после дестроя
-    - name: "Install Docker Core Packages from Debian 13 Main Repository"
-      ansible.builtin.apt:
-        name: [docker.io, python3-docker, jq]
-        state: present
-        update_cache: yes
-
-    # 2. НАСТРОЙКА И КОНФИГУРАЦИЯ ВЕБ-СЕРВЕРА NGINX
-    - name: "Install Nginx from Debian 13 Repository"
+    - name: "Установка веб-сервера Nginx"
       ansible.builtin.apt:
         name: nginx
         state: present
+        update_cache: yes
 
-    - name: "Deploy Enterprise Nginx Configuration with stub_status profile"
-      ansible.builtin.copy:
-        dest: "/etc/nginx/nginx.conf"
-        content: |
-          user www-data;
-          worker_processes auto;
-          pid /run/nginx.pid;
-          include /etc/nginx/modules-enabled/*.conf;
-
-          events {
-              worker_connections 768;
-          }
-
-          http {
-              sendfile on;
-              tcp_nopush on;
-              types_hash_max_size 2048;
-              include /etc/nginx/mime.types;
-              default_type application/octet-stream;
-
-              access_log /var/log/nginx/access.log;
-              error_log /var/log/nginx/error.log;
-
-              gzip on;
-
-              server {
-                  listen 80 default_server;
-                  listen [::]:80 default_server;
-
-                  root /var/www/html;
-                  index index.php index.html index.htm;
-
-                  server_name _;
-
-                  location / {
-                      try_files $uri $uri/ =404;
-                  }
-
-                  location ~ \.php$ {
-                      include snippets/fastcgi-php.conf;
-                      fastcgi_pass unix:/run/php/php8.4-fpm.sock;
-                  }
-
-                  # Открываем страницу статистики для локального экспортера
-                  location /{{ nginx_status_path }} {
-                      stub_status on;
-                      access_log off;
-                      allow {{ local_loopback_ip }};
-                      deny all;
-                  }
-              }
-          }
-        mode: '0644'
-
-    - name: "Install PHP 8.4 Core Components for Rocket Landing"
+    - name: "Установка Filebeat 7.17.13 (напрямую .deb пакетом с зеркала Яндекса)"
       ansible.builtin.apt:
-        name: [php8.4-fpm, php8.4-cli]
+        deb: "https://mirror.yandex.ru/mirrors/elastic/7/pool/main/f/filebeat/filebeat-7.17.13-amd64.deb"
         state: present
 
-    - name: "Ensure PHP-FPM and Nginx are started and enabled"
-      ansible.builtin.service:
-        name: "{{ item }}"
+    # =========================================================================
+    # ДИНАМИЧЕСКИЙ ГЕНЕРАТОР ВЕБ-САЙТА (Bash + Systemd) - БЕЗ ЭМОДЗИ
+    # =========================================================================
+    - name: "Создать скрипт динамического обновления сайта"
+      ansible.builtin.copy:
+        dest: /usr/local/bin/update_site.sh
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          while true; do
+              HOSTNAME=$(hostname)
+              IP=$(hostname -I | awk '{print $1}')
+              CPU_LOAD=$(cat /proc/loadavg | awk '{print $1, $2, $3}')
+              RAM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+              RAM_USED=$(free -m | awk '/^Mem:/{print $3}')
+              UPTIME=$(uptime -p | sed 's/up //')
+
+              cat <<EOF > /var/www/html/index.html
+              <!DOCTYPE html>
+              <html lang="ru">
+              <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>Enterprise Cluster</title>
+                  <meta http-equiv="refresh" content="3">
+                  <style>
+                      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%); color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                      .container { background: rgba(255, 255, 255, 0.6); padding: 40px; border-radius: 20px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.2); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.8); text-align: center; max-width: 600px; }
+                      h1 { font-size: 2.2em; color: #2c3e50; margin-bottom: 20px; }
+                      .stat-box { background: rgba(255, 255, 255, 0.8); margin: 12px 0; padding: 15px; border-radius: 12px; font-size: 1.2em; font-weight: bold; transition: transform 0.2s; display: flex; align-items: center; justify-content: left; }
+                      .stat-box:hover { transform: scale(1.02); }
+                      .footer { margin-top: 25px; font-size: 0.9em; color: #666; }
+                  </style>
+              </head>
+              <body>
+                  <div class="container">
+                      <h1>Добро пожаловать в Enterprise Облако!</h1>
+                      <p>Ваш запрос успешно обработан балансировщиком Yandex ALB.</p>
+                      
+                      <div class="stat-box">Node:&nbsp;<span style="color:#e74c3c;">${HOSTNAME}</span></div>
+                      <div class="stat-box">IP:&nbsp;<span style="color:#2980b9;">${IP}</span></div>
+                      <div class="stat-box">CPU:&nbsp;<span style="color:#d35400;">${CPU_LOAD}</span></div>
+                      <div class="stat-box">RAM:&nbsp;<span style="color:#8e44ad;">${RAM_USED} MB / ${RAM_TOTAL} MB</span></div>
+                      <div class="stat-box">Uptime:&nbsp;<span style="color:#27ae60;">${UPTIME}</span></div>
+                      
+                      <div class="footer">Страница обновляется сама каждые 3 секунды.</div>
+                  </div>
+              </body>
+              </html>
+          EOF
+              sleep 3
+          done
+
+    - name: "Создать systemd службу для генератора сайта"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/dynamic-website.service
+        content: |
+          [Unit]
+          Description=Dynamic Enterprise Website Generator
+          After=network.target nginx.service
+
+          [Service]
+          Type=simple
+          User=root
+          ExecStart=/usr/local/bin/update_site.sh
+          Restart=always
+          RestartSec=3
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: "Перезагрузить systemd и запустить службу"
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        name: dynamic-website
         state: restarted
         enabled: yes
-      loop:
-        - "php8.4-fpm"
-        - "nginx"
+    # =========================================================================
 
-    # 3. КОПИРОВАНИЕ САЙТА С ХАРАКТЕРИСТИКАМИ И МОЕЙ ФАМИЛИЕЙ
-    - name: "Create default web root directory"
-      ansible.builtin.file:
-        path: /var/www/html
-        state: directory
-        mode: '0755'
-
-    - name: "Deploy Index Rocket Landing Code"
+    - name: "Настройка Nginx Stub Status для экспортёра"
       ansible.builtin.copy:
-        dest: "/var/www/html/index.php"
+        dest: /etc/nginx/conf.d/status.conf
         content: |
-          <?php
-          header('Content-Type: text/html; charset=utf-8');
-          
-          // Вытаскиваем человеческое имя ноды, переданное из Ansible, и внутренний IP
-          $node_name = "{{ inventory_hostname }}"; 
-          $internal_ip = $_SERVER['SERVER_ADDR'];
+          server {
+              listen 127.0.0.1:8080;
+              server_name localhost;
+              location /stub_status {
+                  stub_status on;
+                  access_log off;
+                  allow 127.0.0.1;
+                  deny all;
+              }
+          }
+        mode: "0644"
+      notify: Перезагрузить Nginx
 
-          // Считываем реальные характеристики сервера напрямую из файлов Linux
-          $cpu_info = shell_exec("grep -m 1 'model name' /proc/cpuinfo | cut -d: -f2");
-          $mem_info = shell_exec("grep 'MemTotal' /proc/meminfo | awk '{print $2}'");
-          $mem_gb = round($mem_info / 1024 / 1024, 1);
-          ?>
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Курсовой проект - Бобков А.К.</title>
-              <style>
-                  body {
-                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                      text-align: center;
-                      padding-top: 6%;
-                      background: #1a1a2e;
-                      color: #fff;
-                  }
-                  .container {
-                      display: inline-block;
-                      padding: 40px;
-                      background: #16162a;
-                      border-radius: 15px;
-                      border: 1px solid rgba(233, 69, 96, 0.4);
-                      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-                  }
-                  h1 {
-                      color: #e94560;
-                      font-size: 2.2em;
-                      text-transform: uppercase;
-                      letter-spacing: 1px;
-                      margin-bottom: 5px;
-                  }
-                  .student-name {
-                      color: #64ffda;
-                      font-size: 1.2em;
-                      margin-bottom: 30px;
-                      letter-spacing: 1px;
-                  }
-                  h2 {
-                      font-weight: 300;
-                      color: #8892b0;
-                      font-size: 1.3em;
-                  }
-                  .node-badge {
-                      color: #4ecc71;
-                      font-weight: bold;
-                      background: rgba(78, 204, 113, 0.1);
-                      padding: 4px 12px;
-                      border-radius: 20px;
-                      border: 1px solid rgba(78, 204, 113, 0.3);
-                  }
-                  .specs-box {
-                      background: #0f0f1a;
-                      border: 1px solid rgba(255,255,255,0.1);
-                      padding: 20px;
-                      border-radius: 8px;
-                      text-align: left;
-                      margin-top: 25px;
-                      font-size: 0.95em;
-                  }
-                  .specs-box p {
-                      margin: 8px 0;
-                  }
-                  .specs-box b {
-                      color: #8892b0;
-                  }
-                  .footer-text {
-                      color: #64ffda;
-                      margin-top: 30px;
-                      font-size: 0.85em;
-                      opacity: 0.8;
-                  }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🚀 Все работает Enterprise вариант!</h1>
-                  <div class="student-name">Выполнил студент: <b>Бобков А.К.</b></div>
-                  
-                  <h2>Текущая активная нода бэкенда: <span class="node-badge"><?php echo htmlspecialchars($node_name); ?></span></h2>
-                  
-                  <div class="specs-box">
-                      <p><b>Внутренний IP-адрес:</b> <span style="color: #4ecc71;"><?php echo $internal_ip; ?></span></p>
-                      <p><b>Процессор (CPU):</b> <?php echo htmlspecialchars(trim($cpu_info)); ?></p>
-                      <p><b>Оперативная память (RAM):</b> <?php echo $mem_gb; ?> ГБ</p>
-                  </div>
-                  
-                  <p class="footer-text">Трафик успешно сбалансирован через Yandex Application Load Balancer.</p>
-              </div>
-          </body>
-          </html>
-        mode: '0644'
+    - name: "Запуск службы Nginx"
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: yes
 
-    # 4. ОРКЕСТРАЦИЯ КОНТЕЙНЕРОВ СБОРА МЕТРИК НА ВЕБ-НОДАХ
-    - name: "Launch Node Exporter Container on Web Nodes"
-      community.docker.docker_container:
-        name: node-exporter
-        image: "prom/node-exporter:v1.6.1"
-        restart_policy: always
-        network_mode: host
-
-    - name: "Launch Nginx Prometheus Exporter Container"
+    - name: "Запуск Nginx Prometheus Exporter"
       community.docker.docker_container:
         name: nginx-exporter
-        image: "nginx/nginx-prometheus-exporter:latest"
+        image: "nginx/nginx-prometheus-exporter:0.11.0"
         restart_policy: always
         network_mode: host
         command:
-          - "-nginx.scrape-uri={{ nginx_scrape_endpoint }}"
+          - "-nginx.scrape-uri=http://127.0.0.1:8080/stub_status"
+
+    # =========================================================================
+    # ОБНОВЛЕННЫЙ FILEBEAT (МЕТАДАННЫЕ DOCKER ДОБАВЛЕНЫ)
+    # =========================================================================
+    - name: "Настройка агента Filebeat"
+      ansible.builtin.copy:
+        dest: /etc/filebeat/filebeat.yml
+        content: |
+          filebeat.inputs:
+          - type: log
+            enabled: true
+            paths:
+              - /var/log/nginx/*.log
+
+          - type: container
+            enabled: true
+            paths:
+              - '/var/lib/docker/containers/*/*.log'
+
+          processors:
+            - add_docker_metadata:
+                host: "unix:///var/run/docker.sock"
+
+          output.elasticsearch:
+            hosts: ["{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
+        mode: "0644"
+      notify: Перезапустить Filebeat
+
+    - name: "Запуск и включение автозапуска Filebeat"
+      ansible.builtin.systemd:
+        name: filebeat
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Перезагрузить Nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+
+    - name: Перезапустить Filebeat
+      ansible.builtin.systemd:
+        name: filebeat
+        state: restarted

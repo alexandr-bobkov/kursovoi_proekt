@@ -1,163 +1,54 @@
 ---
-- name: "Deploy Kibana Visualization & Master PostgreSQL Database"
-  # ТЗ: Накатываем сбор логов на все хосты, где крутятся контейнеры инфраструктуры
-  hosts: kibana_host:logging_storage:grafana_host
+- name: "Шаг 2.1: Развертывание PostgreSQL и pg-adapter"
+  hosts: logging_storage
   become: true
-  vars:
-    elastic_version: "8.11.3"
-    stack_work_dir: "/opt/elastic-stack"
-    postgres_work_dir: "/opt/postgresql-storage"
-
+  vars_files:
+    - secrets.yml
   tasks:
-    # Предотвращаем ошибку отсутствия Docker на хосте Grafana перед стартом служб
-    - name: "Install Docker Core Engine on Grafana Host if missing"
-      ansible.builtin.apt:
-        name:
-          - docker.io
-          - python3-docker
-        state: present
-        update_cache: yes
-      when: inventory_hostname in groups['grafana_host']
-
-    # 1. СТАРТ СЛУЖБЫ ДОКЕРА ДЛЯ ИСКЛЮЧЕНИЯ CONNECTION ABORTED
-    - name: "Ensure Docker service is running and enabled"
-      ansible.builtin.systemd:
-        name: "docker"
-        state: "started"
-        enabled: yes
-
-    # 2. ПОДГОТОВКА ДИРЕКТОРИЙ 
-    - name: "Create PostgreSQL home directory"
+    - name: "Создание директории данных PostgreSQL"
       ansible.builtin.file:
-        path: "{{ postgres_work_dir }}"
+        path: /opt/postgres/data
         state: directory
-        mode: "0755"
+        mode: "0750" # Безопасные права, Postgres не любит 0777
 
-    - name: "Create Kibana and Filebeat home directory"
-      ansible.builtin.file:
-        path: "{{ stack_work_dir }}"
-        state: directory
-        mode: "0755"
-
-    # 3. ЗАГРУЗКА ИНФРАСТРУКТУРНЫХ ОБРАЗОВ
-    - name: "Pull Elastic Filebeat Image"
-      community.docker.docker_image:
-        name: "docker.elastic.co/beats/filebeat:{{ elastic_version }}"
-        source: pull
-
-    - name: "Pull Elastic Kibana Image"
-      community.docker.docker_image:
-        name: "docker.elastic.co/kibana/kibana:{{ elastic_version }}"
-        source: pull
-
-    - name: "Pull Production PostgreSQL Image"
-      community.docker.docker_image:
-        name: "postgres:15-alpine"
-        source: pull
-
-    # 4. ГЕНЕРАЦИЯ КОНФИГУРАЦИЙ DOCKER-COMPOSE И ФАЙЛОВ
-    - name: "Write Docker-Compose for Production PostgreSQL Cluster"
-      ansible.builtin.copy:
-        dest: "{{ postgres_work_dir }}/docker-compose.yml"
-        mode: "0644"
-        content: |
-          version: '3.8'
-          services:
-            postgres_server:
-              image: postgres:15-alpine
-              container_name: postgresql-server
-              restart: always
-              environment:
-                POSTGRES_DB: metricsdb
-                POSTGRES_USER: crunchy_admin
-                POSTGRES_PASSWORD: BobkovPostgresSecure2026
-              ports:
-                - "5432:5432"
-              volumes:
-                - pgdata:/var/lib/postgresql/data
-          volumes:
-            pgdata:
-      when: inventory_hostname in groups['logging_storage']
-
-    - name: "Write Docker-Compose for Kibana Panel"
-      ansible.builtin.copy:
-        dest: "{{ stack_work_dir }}/docker-compose-kibana.yml"
-        mode: "0644"
-        content: |
-          version: '3.8'
-          services:
-            kibana:
-              image: docker.elastic.co/kibana/kibana:8.11.3
-              container_name: kibana
-              restart: always
-              environment:
-                ELASTICSEARCH_HOSTS: "http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"
-                SERVER_NAME: "kibana-server"
-                SERVER_HOST: "0.0.0.0"
-                XPACK_SECURITY_ENABLED: "false"
-                XPACK_TELEMETRY_ENABLED: "false"
-              ports:
-                - "5601:5601"
-      when: inventory_hostname in groups['kibana_host']
-
-    - name: "Write Universal Docker Container Log Shipping Profile"
-      ansible.builtin.copy:
-        dest: "{{ stack_work_dir }}/filebeat.yml"
-        mode: "0644"
-        content: |
-          filebeat.inputs:
-            - type: container
-              paths:
-                # Автоматически перехватываем логи Elasticsearch, Kibana, Prometheus и Grafana
-                - '/var/lib/docker/containers/*/*.log'
-              processors:
-                - add_docker_metadata:
-                    host: "unix:///var/run/docker.sock"
-
-          output.elasticsearch:
-            # Направляем потоки логов строго на динамический IP хоста СУБД
-            hosts: ["http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"]
-            worker: 1
-
-          logging.level: info
-
-    # 5. ОРКЕСТРАЦИЯ И ЗАПУСК СЕРВИСОВ АВТОматически
-    - name: "Launch Production PostgreSQL Cluster"
-      community.docker.docker_compose_v2:
-        project_src: "{{ postgres_work_dir }}"
-        state: present
-      when: inventory_hostname in groups['logging_storage']
-
-    - name: "Launch Kibana Panel Container"
-      community.docker.docker_compose_v2:
-        project_src: "{{ stack_work_dir }}"
-        files:
-          - "docker-compose-kibana.yml"
-        state: present
-      when: inventory_hostname in groups['kibana_host']
-
-    - name: "Launch Universal Filebeat Infrastructure Agent Container"
+    - name: "Запуск контейнера PostgreSQL"
       community.docker.docker_container:
-        name: filebeat-infra-agent
-        image: "docker.elastic.co/beats/filebeat:{{ elastic_version }}"
+        name: postgres-metrics
+        image: "postgres:15-alpine"
         restart_policy: always
         network_mode: host
-        user: root
+        env:
+          POSTGRES_USER: "crunchy_admin"
+          POSTGRES_PASSWORD: "{{ postgres_password }}"
+          POSTGRES_DB: "postgres"
         volumes:
-          - "{{ stack_work_dir }}/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro"
-          - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
-          - "/var/run/docker.sock:/var/run/docker.sock:ro"
+          - "/opt/postgres/data:/var/lib/postgresql/data"
 
-    # 6. КОРРЕКЦИЯ КЛАССТЕРА ELASTICSEARCH С ДЕЛИГИРОВАНИЕМ ДЛЯ ОДНОЙ НОДЫ
-    - name: "Force zero replicas for all Elasticsearch indices to green-light Kibana"
-      ansible.builtin.uri:
-        url: "http://localhost:9200/_settings"
-        method: PUT
-        body_format: json
-        body:
-          index:
-            number_of_replicas: 0
-        status_code: 200
-      run_once: true
-      delegate_to: elasticsearch_server
-      ignore_errors: yes
+    - name: "Запуск контейнера pg-adapter (PostgreSQL Exporter)"
+      community.docker.docker_container:
+        name: pg-adapter
+        image: "quay.io/prometheuscommunity/postgres-exporter:v0.15.0"
+        restart_policy: always
+        network_mode: host
+        env:
+          # Строка подключения к базе данных с использованием переменной из secrets.yml
+          DATA_SOURCE_NAME: "postgresql://crunchy_admin:{{ postgres_password }}@127.0.0.1:5432/postgres?sslmode=disable"
+
+- name: "Шаг 2.2: Развертывание Kibana"
+  hosts: kibana_host
+  become: true
+  tasks:
+    - name: "Запуск контейнера Kibana"
+      community.docker.docker_container:
+        name: kibana
+        image: "docker.elastic.co/kibana/kibana:7.17.13"
+        restart_policy: always
+        network_mode: host
+        env:
+          # Динамически получаем IP сервера logging_storage
+          ELASTICSEARCH_HOSTS: "http://{{ hostvars[groups['logging_storage'] | first]['ansible_host'] }}:9200"
+
+    - name: "Ожидание готовности веб-интерфейса Kibana (порт 5601)"
+      ansible.builtin.wait_for:
+        port: 5601
+        timeout: 90

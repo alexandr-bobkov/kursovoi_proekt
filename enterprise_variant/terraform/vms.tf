@@ -1,10 +1,19 @@
-data "yandex_compute_image" "debian" {
-  family = "debian-13"
+# АВТОГЕНЕРАЦИЯ SSH КЛЮЧЕЙ
+resource "tls_private_key" "auto_ssh" {
+  algorithm = "ED25519"
 }
 
-# ==============================================================================
-# 1. ХОСТ-БАСТИОН (ЕДИНСТВЕННЫЙ ВНЕШНИЙ SSH ШЛЮЗ КОНТУРА)
-# ==============================================================================
+resource "local_file" "ssh_private_key" {
+  content         = tls_private_key.auto_ssh.private_key_openssh
+  filename        = "${path.module}/id_ed25519"
+  file_permission = "0600"
+}
+
+data "yandex_compute_image" "debian" {
+  family = "debian-12"
+}
+
+# 1. BASTION GATEWAY
 resource "yandex_compute_instance" "bastion" {
   name        = "enterprise-bastion"
   zone        = "ru-central1-a"
@@ -38,14 +47,12 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru" #открытый ключ
+      - "${tls_private_key.auto_ssh.public_key_openssh}"
 EOT
   }
 }
 
-# ==============================================================================
-# 2. ВЫДЕЛЕННЫЙ СЕРВЕР ВЕБ-ПАНЕЛИ GRAFANA И PROMETHEUS (ВНЕШНИЙ IP ВКЛЮЧЕН)
-# ==============================================================================
+# 2. GRAFANA + PROMETHEUS
 resource "yandex_compute_instance" "prometheus" {
   name        = "enterprise-grafana-server"
   zone        = "ru-central1-a"
@@ -66,7 +73,7 @@ resource "yandex_compute_instance" "prometheus" {
 
   network_interface {
     subnet_id          = yandex_vpc_subnet.public_a.id
-    nat                = true # Разрешаем внешний IP для проверки преподавателем
+    nat                = true
     security_group_ids = [yandex_vpc_security_group.grafana_sg.id]
   }
 
@@ -79,14 +86,12 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
+      - "${tls_private_key.auto_ssh.public_key_openssh}"
 EOT
   }
 }
 
-# ==============================================================================
-# 3. ВЫДЕЛЕННЫЙ СЕРВЕР ВЕБ-ПАНЕЛИ KIBANA (ВНЕШНИЙ IP ВКЛЮЧЕН)
-# ==============================================================================
+# 3. KIBANA SERVER
 resource "yandex_compute_instance" "kibana_server" {
   name        = "enterprise-kibana-server"
   zone        = "ru-central1-a"
@@ -107,7 +112,7 @@ resource "yandex_compute_instance" "kibana_server" {
 
   network_interface {
     subnet_id          = yandex_vpc_subnet.public_a.id
-    nat                = true # Разрешаем внешний IP для проверки
+    nat                = true
     security_group_ids = [yandex_vpc_security_group.kibana_sg.id]
   }
 
@@ -120,14 +125,12 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
+      - "${tls_private_key.auto_ssh.public_key_openssh}"
 EOT
   }
 }
 
-# ==============================================================================
-# 4. ИЗОЛИРОВАННАЯ БАЗА ДАННЫХ ЛОГОВ (ELASTICSEARCH STORAGE - ИЗОЛИРОВАНА)
-# ==============================================================================
+# 4. ELASTICSEARCH STORAGE & DB
 resource "yandex_compute_instance" "elasticsearch_storage" {
   name        = "enterprise-elasticsearch-storage"
   zone        = "ru-central1-a"
@@ -148,7 +151,7 @@ resource "yandex_compute_instance" "elasticsearch_storage" {
 
   network_interface {
     subnet_id          = yandex_vpc_subnet.private_a.id
-    nat                = false # Оставляем строго приватным по Zero Trust
+    nat                = false
     security_group_ids = [yandex_vpc_security_group.internal_mgmt_sg.id]
   }
 
@@ -161,14 +164,12 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
+      - "${tls_private_key.auto_ssh.public_key_openssh}"
 EOT
   }
 }
 
-# ==============================================================================
-# 5. ДИНАМИЧЕСКАЯ ГРУППА МАСШТАБИРОВАНИЯ ВЕБ-СЕРВЕРОВ (CORE_FRACTION = 100)
-# ==============================================================================
+# 5. DYNAMIC INSTANCE GROUP
 resource "yandex_iam_service_account" "ig_sa" {
   name = "enterprise-ig-service-account"
 }
@@ -185,12 +186,12 @@ resource "yandex_compute_instance_group" "web_group" {
   service_account_id = yandex_iam_service_account.ig_sa.id
 
   instance_template {
-    name = "web-node-{instance.index}"
+    name        = "web-node-{instance.index}"
     platform_id = "standard-v3"
     resources {
       cores         = 2
       memory        = 2
-      core_fraction = 100 # Гарантия процессора 100% для легитимного  по CPU
+      core_fraction = 100
     }
 
     boot_disk {
@@ -216,7 +217,7 @@ users:
     shell: /bin/bash
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAoFf1G4TtCvUyjfoGYU9vzHj+/hM0jAKD830uCiqIW 8517@yandex.ru"
+      - "${tls_private_key.auto_ssh.public_key_openssh}"
 EOT
     }
   }
@@ -243,20 +244,19 @@ EOT
   }
 
   application_load_balancer {
-    target_group_name = "dynamic-web-target-group"
+    target_group_name    = "dynamic-web-target-group"
+    ignore_health_checks = true
   }
 
   depends_on = [yandex_resourcemanager_folder_iam_member.ig_editor]
 }
 
-# ==============================================================================
-# 6. АВТОГЕНЕРАЦИЯ ИНВЕНТАРЯ ANSIBLE 
-# ==============================================================================
+# 6. INVENTORY
 resource "local_file" "ansible_inventory" {
   filename = "${path.module}/../ansible/hosts.ini"
   content  = <<EOT
 [bastion]
-bastion_host ansible_host=${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} ansible_user=debian ansible_ssh_common_args=""
+bastion_host ansible_host=${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} ansible_user=debian
 
 [kibana_host]
 kibana_server ansible_host=${yandex_compute_instance.kibana_server.network_interface.0.ip_address} ansible_user=debian elastic_target_ip=${yandex_compute_instance.elasticsearch_storage.network_interface.0.ip_address}
@@ -273,8 +273,7 @@ web-node-${index} ansible_host=${instance.network_interface.0.ip_address} ansibl
 %{ endfor ~}
 
 [all:vars]
-# Фиксируем верный  приватный ключ
-ansible_ssh_private_key_file="~/.ssh/id_ed25519"
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
 [internal:children]
 kibana_host
@@ -283,20 +282,12 @@ logging_storage
 web_nodes
 
 [internal:vars]
-# Явно передаем путь к ключу внутрь туннеля прыжка, чтобы local-exec в Terraform не зависел от агентов памяти
-ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand='ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -l debian ${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'"
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyJump=debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}'
 EOT
+  depends_on = [local_file.ssh_private_key]
 }
 
-
-
-
-
-
-
-# ==============================================================================
-# 7. ИНФРАСТРУКТУРНЫЙ БЭКАП ВСЕХ ДИСКОВ КОНТУРА (SNAPSHOT SCHEDULE)
-# ==============================================================================
+# 7. SNAPSHOT SCHEDULE
 resource "yandex_compute_snapshot_schedule" "enterprise_backup" {
   name = "enterprise-global-snapshot-schedule"
 
@@ -310,14 +301,29 @@ resource "yandex_compute_snapshot_schedule" "enterprise_backup" {
     yandex_compute_instance.bastion.boot_disk.0.disk_id,
     yandex_compute_instance.prometheus.boot_disk.0.disk_id,
     yandex_compute_instance.kibana_server.boot_disk.0.disk_id,
-    yandex_compute_instance.elasticsearch_storage.boot_disk.0.disk_id # Бэкап Elasticsearch включен!
+    yandex_compute_instance.elasticsearch_storage.boot_disk.0.disk_id
   ]
 }
 
-resource "null_resource" "null_ansible_trigger" {
-  depends_on = [local_file.ansible_inventory, yandex_compute_instance_group.web_group]
+# 8. АВТОМАТИЧЕСКИЙ ЗАПУСК ANSIBLE ПОСЛЕ ДЕПЛОЯ
+resource "null_resource" "run_ansible" {
+  # Триггер срабатывает каждый раз, когда пересоздается инвентарь
+  triggers = {
+    inventory_id = local_file.ansible_inventory.id
+  }
 
+  # Ждем, пока сгенерируется hosts.ini и поднимутся все ВМ
+  depends_on = [
+    local_file.ansible_inventory,
+    yandex_compute_instance.bastion,
+    yandex_compute_instance.kibana_server,
+    yandex_compute_instance.prometheus,
+    yandex_compute_instance.elasticsearch_storage,
+    yandex_compute_instance_group.web_group
+  ]
+
+  # Выполняем bash-скрипт на вашем локальном компьютере
   provisioner "local-exec" {
-    command = "bash run_ansible.sh"
+    command = "bash ${path.module}/run_ansible.sh"
   }
 }

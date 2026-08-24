@@ -1,71 +1,104 @@
 ---
-# ==============================================================================
-# 1. ДЕПЛОЙ СЕКЦИИ ХРАНЕНИЯ ЛОГОВ ELASTICSEARCH ПОД DEBIAN 13 (TRIXIE)
-# ==============================================================================
-- name: "Deploy Unified Elastic Stack v8.11.3"
-  # Ставим Docker сразу на все три управляющие машины контура
-  hosts: logging_storage:kibana_host:grafana_host
+- name: "Шаг 1: Установка Docker и базовых зависимостей на все узлы"
+  hosts: internal
   become: true
-  gather_facts: true
-  vars:
-    elastic_version: "8.11.3"
-    stack_work_dir: "/opt/elastic-stack"
-
   tasks:
-    # 1. УКАЗЫВАЕМ ТОЧНЫЕ КОРРЕКТНЫЕ ИМЕНА ПАКЕТОВ ДЛЯ DEBIAN 13
-    - name: "Install Native Docker Engine and Utilities for Debian 13"
+    - name: "Удаление старого формата debian.sources (если есть)"
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/debian.sources
+        state: absent
+
+    - name: "Настройка зеркал Яндекса для APT (защита от таймаутов Debian)"
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list
+        content: |
+          deb http://mirror.yandex.ru/debian bookworm main contrib non-free non-free-firmware
+          deb http://mirror.yandex.ru/debian-security bookworm-security main contrib non-free non-free-firmware
+          deb http://mirror.yandex.ru/debian bookworm-updates main contrib non-free non-free-firmware
+        mode: '0644'
+
+    - name: "Установка системных пакетов"
       ansible.builtin.apt:
         name:
-          - docker.io
-          - docker-buildx
-          - docker-compose  # Нативное Enterprise-имя пакета в Debian 13
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
           - python3-docker
+          - docker.io
         state: present
         update_cache: yes
 
-    # 2. ПОДГОТОВКА ДИРЕКТОРИЙ ОВНЕРСТВА СТЕКА (ТОЛЬКО НА ХОСТАХ ЛОГОВ/КИБАНЫ)
-    - name: "Create Production Elastic Stack Directory"
+    - name: "Создание директории конфигурации Docker"
       ansible.builtin.file:
-        path: "{{ stack_work_dir }}"
+        path: /etc/docker
         state: directory
-        mode: "0755"
-      when: inventory_hostname in groups['logging_storage'] or inventory_hostname in groups['kibana_host']
+        mode: '0755'
 
-    # 3. ЗАГРУЗКА ИНФРАСТРУКТУРНЫХ ОБРАЗОВ
-    - name: "Pull Elastic Search Core Image"
-      community.docker.docker_image:
-        name: "docker.elastic.co/elasticsearch/elasticsearch:{{ elastic_version }}"
-        source: pull
-      when: inventory_hostname in groups['logging_storage']
-
-    # 4. ГЕНЕРАЦИЯ ОДНОНОДОВОГО DOCKER-COMPOSE ДЛЯ СУБД ЛОГОВ
-    - name: "Write Docker-Compose for Production Single-Node Cluster"
+    - name: "Настройка зеркал Docker Hub (daemon.json)"
       ansible.builtin.copy:
-        dest: "{{ stack_work_dir }}/docker-compose.yml"
-        mode: "0644"
-        content: |
-          version: '3.8'
-          services:
-            elasticsearch:
-              image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3
-              container_name: elasticsearch-node
-              restart: always
-              environment:
-                - discovery.type=single-node
-                - xpack.security.enabled=false
-                - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
-                - cluster.routing.allocation.disk.threshold_enabled=false
-              ports:
-                - "9200:9200"
-              volumes:
-                - esdata:/usr/share/elasticsearch/data
-          volumes:
-            esdata:
-      when: inventory_hostname in groups['logging_storage']
+        dest: /etc/docker/daemon.json
+        content: "{{ {'registry-mirrors': ['https://mirror.gcr.io', 'https://huecker.io']} | to_nice_json }}"
+        mode: '0644'
+      register: docker_mirror_config
 
-    # 5. ЗАПУСК БАЗЫ ДАННЫХ ЛОГОВ
-    - name: "Launch Production Single-Node Core Cluster"
-      community.docker.docker_compose_v2:
-        project_src: "{{ stack_work_dir }}"
+    - name: "Проверка и запуск службы Docker"
+      ansible.builtin.systemd:
+        name: docker
+        state: "{{ 'restarted' if docker_mirror_config.changed else 'started' }}"
+        enabled: yes
+
+    - name: "Развертывание Node Exporter на внутренних инстансах"
+      community.docker.docker_container:
+        name: node-exporter
+        image: "prom/node-exporter:v1.6.1"
+        restart_policy: always
+        network_mode: host
+        pid_mode: host
+        volumes:
+          - "/proc:/host/proc:ro"
+          - "/sys:/host/sys:ro"
+          - "/:/rootfs:ro"
+        command:
+          - "--path.procfs=/host/proc"
+          - "--path.sysfs=/host/sys"
+          - "--path.rootfs=/rootfs"
+
+- name: "Развертывание Elasticsearch на хосте хранения логов"
+  hosts: logging_storage
+  become: true
+  vars_files:
+    - secrets.yml
+  tasks:
+    - name: "Установка параметров ядра vm.max_map_count для Elasticsearch"
+      ansible.posix.sysctl:
+        name: vm.max_map_count
+        value: "262144"
         state: present
-      when: inventory_hostname in groups['logging_storage']
+        reload: yes
+
+    - name: "Создание директории данных Elasticsearch"
+      ansible.builtin.file:
+        path: /opt/elasticsearch/data
+        state: directory
+        mode: "0777"
+
+    - name: "Запуск контейнера Elasticsearch"
+      community.docker.docker_container:
+        name: elasticsearch
+        image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.13"
+        restart_policy: always
+        network_mode: host
+        env:
+          discovery.type: "single-node"
+          ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+          xpack.security.enabled: "false"
+        volumes:
+          - "/opt/elasticsearch/data:/usr/share/elasticsearch/data"
+
+    - name: "Ожидание готовности API Elasticsearch (порт 9200)"
+      ansible.builtin.wait_for:
+        port: 9200
+        timeout: 60
