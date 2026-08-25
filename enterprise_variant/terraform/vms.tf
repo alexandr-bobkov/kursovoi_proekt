@@ -210,7 +210,7 @@ resource "yandex_compute_instance_group" "web_group" {
 }
 
 # ==============================================================================
-# 6. INVENTORY
+# 6. INVENTORY (БРОНЕБОЙНЫЙ ВАРИАНТ С PROXYCOMMAND)
 # ==============================================================================
 resource "local_file" "ansible_inventory" {
   filename = "${path.module}/../ansible/hosts.ini"
@@ -234,6 +234,7 @@ web-node-${index} ansible_host=${instance.network_interface.0.ip_address} ansibl
 
 [all:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+ansible_ssh_private_key_file=${replace(var.ssh_public_key_path, ".pub", "")}
 
 [internal:children]
 kibana_host
@@ -242,9 +243,10 @@ logging_storage
 web_nodes
 
 [internal:vars]
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyJump=debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address} -o ControlMaster=no'
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand=\"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${replace(var.ssh_public_key_path, ".pub", "")} -W %h:%p debian@${yandex_compute_instance.bastion.network_interface.0.nat_ip_address}\" -o ControlMaster=no'
 EOT
 }
+
 
 # ==============================================================================
 # 7. SNAPSHOT SCHEDULE
