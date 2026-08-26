@@ -1,41 +1,53 @@
 #!/bin/bash
 set -e
 
-cd "$(dirname "$0")/../ansible"
+# Переходим в папку ansible
+cd "$(dirname "$0")/../ansible" || exit 1
+
 export ANSIBLE_HOST_KEY_CHECKING=False
 
-# Подгружаем сгенерированный ключ в ssh-agent
-KEY_PATH="$(pwd)/../terraform/id_ed25519"
-chmod 600 "$KEY_PATH"
+echo "=== [DevOps Auto-Pilot] Запуск пайплайна развертывания ==="
+echo "=============================================================================="
 
-if [ -z "$SSH_AUTH_SOCK" ]; then
-    eval $(ssh-agent -s) >/dev/null
-    ssh-add "$KEY_PATH" >/dev/null 2>&1
-else
-    ssh-add "$KEY_PATH" >/dev/null 2>&1 || true
+echo "--> Даем инфраструктуре 30 сек на инициализацию сетей..."
+sleep 30
+
+echo "--> Автоматическое знакомство с Бастионом (добавление в known_hosts)..."
+mkdir -p ~/.ssh
+# Вытаскиваем строго один IP — адрес Бастиона
+BASTION_IP=$(grep -A 1 '\[bastion\]' hosts.ini | grep -oP 'ansible_host=\K[0-9.]+')
+if [ ! -z "$BASTION_IP" ]; then
+    ssh-keyscan -H "$BASTION_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
 fi
 
-BASTION_IP=$(grep 'bastion_host' hosts.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+echo "--> Ожидание готовности Бастиона..."
+ansible bastion -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=20"
+echo "=== [OK] Бастион поднялся и готов принимать подключения! ==="
 
-echo "--> Ожидание готовности SSH на Бастионе ($BASTION_IP)..."
-until nc -z -w 5 "$BASTION_IP" 22 2>/dev/null; do
-    sleep 5
-done
-echo "=== Бастион готов! ==="
+echo "--> Ожидание готовности внутренних серверов (через ProxyCommand)..."
+ansible internal -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=10" -f 1
+echo "=== [OK] Все серверы готовы к конфигурированию! ==="
+echo "=============================================================================="
 
-echo "=== [1/5] Запуск базовой настройки и веб-серверов ==="
+echo "=== [1/5] Запуск деплоя сайта ==="
 ansible-playbook -i hosts.ini playbook.yml
 
-echo "=== [2/5] Запуск стека логирования (ELK) ==="
+echo "=== [2/5] Запуск стека логирования ELK ==="
 ansible-playbook -i hosts.ini playbook_logging.yml
 
-echo "=== [3/5] Установка метрик и сборщиков Filebeat ==="
+echo "=== [3/5] Установка exporter'ов ==="
 ansible-playbook -i hosts.ini update_web.yml
 
-echo "=== [4/5] Настройка мониторинга (Prometheus) ==="
+echo "=== [4/5] Настройка Prometheus ==="
 ansible-playbook -i hosts.ini deploy_prometheus.yml
 
-echo "=== [5/5] Развертывание Grafana Enterprise ==="
+echo "=== [5/5] Развертывание Grafana ==="
 ansible-playbook -i hosts.ini deploy_grafana.yml
 
-echo "=== ВСЕ СЕРВИСЫ УСПЕШНО ЗАПУЩЕНЫ АВТОМАТОМ! ==="
+echo "=============================================================================="
+echo "=== Обновление index.php (Hardware Stats) ==="
+bash ./update_site.sh
+
+echo "=============================================================================="
+echo "=== ИНФРАСТРУКТУРА УСПЕШНО РАЗВЕРНУТА НА 100%! ==="
+echo "=============================================================================="

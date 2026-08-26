@@ -13,6 +13,14 @@ echo "==========================================================================
 echo "--> [Этап 1/3] Даем инфраструктуре 30 сек на инициализацию сетей..."
 sleep 30
 
+echo "--> Автоматическое знакомство с Бастионом (добавление в known_hosts)..."
+mkdir -p ~/.ssh
+# Вытаскиваем строго один IP — адрес Бастиона
+BASTION_IP=$(grep -A 1 '\[bastion\]' hosts.ini | grep -oP 'ansible_host=\K[0-9.]+')
+if [ ! -z "$BASTION_IP" ]; then
+    ssh-keyscan -H "$BASTION_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+fi
+
 echo "--> Ожидание готовности Бастиона..."
 ansible bastion -i hosts.ini -m wait_for_connection -a "timeout=300 sleep=20"
 echo "=== [OK] Бастион поднялся и готов принимать подключения! ==="

@@ -1,4 +1,7 @@
 ---
+# ==============================================================================
+# НАСТРОЙКА БЕЗОПАСНОСТИ BASTION ХОСТА
+# ==============================================================================
 - name: Ensure SSH TCP Forwarding is permanently enabled on Bastion
   hosts: bastion
   become: yes
@@ -9,17 +12,41 @@
         regexp: '^#?AllowTcpForwarding'
         line: 'AllowTcpForwarding yes'
         state: present
-    - name: Force enable AllowAgentForwarding in sshd_config
+
+    - name: Disable AllowAgentForwarding (Закрываем критическую уязвимость проброса агента)
       lineinfile:
         path: /etc/ssh/sshd_config
         regexp: '^#?AllowAgentForwarding'
-        line: 'AllowAgentForwarding yes'
+        line: 'AllowAgentForwarding no'
         state: present
+
+    - name: Disable root login (Закрываем прямой вход для суперпользователя)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+
+    - name: Установка Fail2Ban (Автоматический бан ботнетов на 22 порту)
+      apt:
+        name: fail2ban
+        state: present
+        update_cache: yes
+
+    - name: Включение службы Fail2Ban
+      systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+
     - name: Restart SSH service to apply permanent forwarding rules
       systemd:
         name: ssh
         state: restarted
 
+# ==============================================================================
+# РАЗВЕРТЫВАНИЕ ВЕБ-СЕРВЕРОВ (ДИНАМИЧЕСКИЙ PHP)
+# ==============================================================================
 - name: Deploy Dynamic PHP Website with Hardware Stats on Debian 13
   hosts: webservers
   become: yes
@@ -29,10 +56,16 @@
         name: [nginx, php-fpm]
         state: present
         update_cache: yes
+
+    - name: Opredelenie tochnogo imeni socketa PHP-FPM v sisteme Debian 13
+      shell: "ls /run/php/php*-fpm.sock | head -n 1"
+      register: php_socket_path
+
     - name: Prinyaditelnoe udalenie starogo konfiga Nginx default
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
+
     - name: Zapiss novogo konfiga Nginx default s podderzhkoi PHP i Stub Status
       copy:
         dest: /etc/nginx/sites-available/default
@@ -55,17 +88,19 @@
               }
               location ~ \.php$ {
                   include snippets/fastcgi-php.conf;
-                  fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+                  fastcgi_pass unix:{{ php_socket_path.stdout }};
               }
           }
         owner: root
         group: root
         mode: '0644'
+
     - name: Sozdanie simvolicheskoj ssylki dlya aktivacii sajta
       file:
         src: /etc/nginx/sites-available/default
         dest: /etc/nginx/sites-enabled/default
         state: link
+
     - name: Generaciya dinamicheskogo index.php faila s hardware dannymi
       copy:
         dest: /var/www/html/index.php
@@ -74,7 +109,7 @@
           <html lang="ru">
           <head>
               <meta charset="UTF-8">
-              <title>Инфраструктура Enterprise.</title>
+              <title>Курсовой проект.</title>
               <style>
                   body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
                   .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; max-width: 600px; width: 100%; border-top: 8px solid #0052cc; margin: 20px; }
@@ -90,10 +125,11 @@
           </head>
           <body>
               <div class="container">
-                  <h1>Enterprise DevOps</h1>
+                  <h1>Курсовой проект DevOps</h1>
+                  <div class="author">Базовый вариант</div>
                   <p>Infrastruktura rabotaet v Yandex Cloud.</p>
                   <div class="status-box">
-                      <div class="status-line">Имя ноды: <span class="badge"><?php echo strtoupper('{{ inventory_hostname }}'); ?></span></div>
+                      <div class="status-line">Имя хоста: <span class="badge"><?php echo strtoupper('{{ inventory_hostname }}'); ?></span></div>
                       <div class="status-line">Внутренний IP: <span class="ip-text">{{ ansible_host }}</span></div>
                   </div>
                   <div class="footer">Infrastruktura kak kod (IaC) &copy; 2026</div>
@@ -103,10 +139,12 @@
         owner: www-data
         group: www-data
         mode: '0644'
-    - name: Prinyaditelnoe udalenie staroi  zaglushki index.html
+
+    - name: Prinyaditelnoe udalenie staroi HTML zaglushki index.html
       file:
         path: /var/www/html/index.html
         state: absent
+
     - name: Pervonachalnyi zapusk i avtozagruzka sluzhb veb-steka
       systemd:
         name: "{{ item }}"
